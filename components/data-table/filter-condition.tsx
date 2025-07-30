@@ -49,6 +49,186 @@ export function FilterConditionComponent({ condition, columns, onUpdate, onRemov
     }
   }
 
+  // Helper functions for rendering different input types
+  const renderTextInput = () => (
+    <Input
+      placeholder="Enter value"
+      value={condition.value || ""}
+      onChange={(e) => onUpdate({ ...condition, value: e.target.value })}
+    />
+  )
+
+  const renderNumberInput = () => (
+    <Input
+      type="number"
+      placeholder="Enter number"
+      value={condition.value || ""}
+      onChange={(e) => onUpdate({ ...condition, value: e.target.value })}
+    />
+  )
+
+  const renderRangeInput = () => {
+    if (condition.operator === "isBetween") {
+      return (
+        <div className="flex gap-2">
+          <Input
+            type="number"
+            placeholder="Min"
+            value={condition.value?.min || ""}
+            onChange={(e) =>
+              onUpdate({
+                ...condition,
+                value: { ...condition.value, min: e.target.value },
+              })
+            }
+          />
+          <Input
+            type="number"
+            placeholder="Max"
+            value={condition.value?.max || ""}
+            onChange={(e) =>
+              onUpdate({
+                ...condition,
+                value: { ...condition.value, max: e.target.value },
+              })
+            }
+          />
+        </div>
+      )
+    }
+    return renderNumberInput()
+  }
+
+  const renderDateInput = () => (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          className={cn("justify-start text-left font-normal", !condition.value && "text-muted-foreground")}
+        >
+          <CalendarIcon className="mr-2 h-4 w-4" />
+          {condition.value ? format(new Date(condition.value), "PPP") : "Pick a date"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0">
+        <Calendar
+          mode="single"
+          selected={condition.value ? new Date(condition.value) : undefined}
+          onSelect={(date) => onUpdate({ ...condition, value: date?.toISOString() })}
+        />
+      </PopoverContent>
+    </Popover>
+  )
+
+  const renderDateRangeInput = () => {
+    if (condition.operator === "isBetween") {
+      return (
+        <div className="flex gap-2">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="justify-start text-left font-normal bg-transparent">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {startDate ? format(startDate, "PPP") : "Start date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={startDate}
+                onSelect={(date) => {
+                  setStartDate(date)
+                  onUpdate({
+                    ...condition,
+                    value: {
+                      ...condition.value,
+                      start: date?.toISOString(),
+                    },
+                  })
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="justify-start text-left font-normal bg-transparent">
+                <CalendarIcon className="mr-2 h-4 w-4" />
+                {endDate ? format(endDate, "PPP") : "End date"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0">
+              <Calendar
+                mode="single"
+                selected={endDate}
+                onSelect={(date) => {
+                  setEndDate(date)
+                  onUpdate({
+                    ...condition,
+                    value: {
+                      ...condition.value,
+                      end: date?.toISOString(),
+                    },
+                  })
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      )
+    }
+    return renderDateInput()
+  }
+
+  const renderSelectInput = () => (
+    <Select value={condition.value || ""} onValueChange={(value) => onUpdate({ ...condition, value })}>
+      <SelectTrigger>
+        <SelectValue placeholder="Select option" />
+      </SelectTrigger>
+      <SelectContent>
+        {selectedColumn?.options?.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+
+  const renderMultiSelectInput = () => (
+    <div className="space-y-2">
+      {selectedColumn?.options?.map((option) => (
+        <div key={option.value} className="flex items-center space-x-2">
+          <Checkbox
+            id={option.value}
+            checked={condition.value?.includes(option.value) || false}
+            onCheckedChange={(checked) => {
+              const currentValues = condition.value || []
+              const newValues = checked
+                ? [...currentValues, option.value]
+                : currentValues.filter((v: string) => v !== option.value)
+              onUpdate({ ...condition, value: newValues })
+            }}
+          />
+          <Label htmlFor={option.value}>{option.label}</Label>
+        </div>
+      ))}
+    </div>
+  )
+
+  const renderBooleanInput = () => (
+    <Select
+      value={condition.value?.toString() || ""}
+      onValueChange={(value) => onUpdate({ ...condition, value: value === "true" })}
+    >
+      <SelectTrigger>
+        <SelectValue placeholder="Select value" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="true">True</SelectItem>
+        <SelectItem value="false">False</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+
   function renderValueInput() {
     if (!selectedColumn) return null
 
@@ -56,197 +236,28 @@ export function FilterConditionComponent({ condition, columns, onUpdate, onRemov
 
     switch (variant) {
       case "text":
-        return (
-          <Input
-            placeholder="Enter value"
-            value={condition.value || ""}
-            onChange={(e) => onUpdate({ ...condition, value: e.target.value })}
-          />
-        )
+        return renderTextInput()
 
       case "number":
-        return (
-          <Input
-            type="number"
-            placeholder="Enter number"
-            value={condition.value || ""}
-            onChange={(e) => onUpdate({ ...condition, value: e.target.value })}
-          />
-        )
+        return renderNumberInput()
 
       case "range":
-        if (condition.operator === "isBetween") {
-          return (
-            <div className="flex gap-2">
-              <Input
-                type="number"
-                placeholder="Min"
-                value={condition.value?.min || ""}
-                onChange={(e) =>
-                  onUpdate({
-                    ...condition,
-                    value: { ...condition.value, min: e.target.value },
-                  })
-                }
-              />
-              <Input
-                type="number"
-                placeholder="Max"
-                value={condition.value?.max || ""}
-                onChange={(e) =>
-                  onUpdate({
-                    ...condition,
-                    value: { ...condition.value, max: e.target.value },
-                  })
-                }
-              />
-            </div>
-          )
-        }
-        return (
-          <Input
-            type="number"
-            placeholder="Enter number"
-            value={condition.value || ""}
-            onChange={(e) => onUpdate({ ...condition, value: e.target.value })}
-          />
-        )
+        return renderRangeInput()
 
       case "date":
-        return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="outline"
-                className={cn("justify-start text-left font-normal", !condition.value && "text-muted-foreground")}
-              >
-                <CalendarIcon className="mr-2 h-4 w-4" />
-                {condition.value ? format(new Date(condition.value), "PPP") : "Pick a date"}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={condition.value ? new Date(condition.value) : undefined}
-                onSelect={(date) => onUpdate({ ...condition, value: date?.toISOString() })}
-                initialFocus
-              />
-            </PopoverContent>
-          </Popover>
-        )
+        return renderDateInput()
 
       case "dateRange":
-        if (condition.operator === "isBetween") {
-          return (
-            <div className="flex gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal bg-transparent">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {startDate ? format(startDate, "PPP") : "Start date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={startDate}
-                    onSelect={(date) => {
-                      setStartDate(date)
-                      onUpdate({
-                        ...condition,
-                        value: {
-                          ...condition.value,
-                          start: date?.toISOString(),
-                        },
-                      })
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="justify-start text-left font-normal bg-transparent">
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {endDate ? format(endDate, "PPP") : "End date"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                  <Calendar
-                    mode="single"
-                    selected={endDate}
-                    onSelect={(date) => {
-                      setEndDate(date)
-                      onUpdate({
-                        ...condition,
-                        value: {
-                          ...condition.value,
-                          end: date?.toISOString(),
-                        },
-                      })
-                    }}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          )
-        }
-        return renderValueInput()
+        return renderDateRangeInput()
 
       case "select":
-        return (
-          <Select value={condition.value || ""} onValueChange={(value) => onUpdate({ ...condition, value })}>
-            <SelectTrigger>
-              <SelectValue placeholder="Select option" />
-            </SelectTrigger>
-            <SelectContent>
-              {selectedColumn.options?.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )
+        return renderSelectInput()
 
       case "multiSelect":
-        return (
-          <div className="space-y-2">
-            {selectedColumn.options?.map((option) => (
-              <div key={option.value} className="flex items-center space-x-2">
-                <Checkbox
-                  id={option.value}
-                  checked={condition.value?.includes(option.value) || false}
-                  onCheckedChange={(checked) => {
-                    const currentValues = condition.value || []
-                    const newValues = checked
-                      ? [...currentValues, option.value]
-                      : currentValues.filter((v: string) => v !== option.value)
-                    onUpdate({ ...condition, value: newValues })
-                  }}
-                />
-                <Label htmlFor={option.value}>{option.label}</Label>
-              </div>
-            ))}
-          </div>
-        )
+        return renderMultiSelectInput()
 
       case "boolean":
-        return (
-          <Select
-            value={condition.value?.toString() || ""}
-            onValueChange={(value) => onUpdate({ ...condition, value: value === "true" })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select value" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">True</SelectItem>
-              <SelectItem value="false">False</SelectItem>
-            </SelectContent>
-          </Select>
-        )
+        return renderBooleanInput()
 
       default:
         return null

@@ -9,22 +9,19 @@ export const metadata: Metadata = {
   description: 'Advanced data table with advanced filtering, sorting, and export capabilities',
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+interface RootLayoutProps {
+  readonly children: React.ReactNode
+}
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
-    <html lang="en">
-      <head>
-        <style>{`
-            html {
-              font-family: ${GeistSans.style.fontFamily};
-              --font-sans: ${GeistSans.variable};
-              --font-mono: ${GeistMono.variable};
-            }
-        `}</style>
-      </head>
+    <html 
+      lang="en" 
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      style={{
+        fontFamily: GeistSans.style.fontFamily,
+      }}
+    >
       <body>
         <Providers>{children}</Providers>
       </body>

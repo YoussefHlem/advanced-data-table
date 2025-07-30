@@ -1,47 +1,46 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
-import { DataTable, type QuickFilterConfig } from "./data-table"
+import { DataTable} from "./data-table"
+import { type QuickFilterConfig } from "./data-table-search"
 import { useAllReports, type Report } from "@/lib/graphql-client"
-import type { ColumnConfig } from "@/lib/types"
+import type { ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
 import { format } from "date-fns"
+import { Edit, Trash2, Eye, Download, Archive } from "lucide-react"
 
 const REPORTS_SEARCH_FIELDS = ["title", "description", "client_phone", "neighbourhood.name", "team.name"]
 
+// Helper function to extract unique options from reports data
+function extractUniqueOptions<T>(data: T[], accessor: (item: T) => string | undefined): string[] {
+  return [...new Set(data.map(accessor))].filter(Boolean) as string[]
+}
+
 export function ReportsTable() {
   // Use React Query hook for data fetching
-  const { data: allReports = [], isLoading: loading, error, refetch } = useAllReports()
+  const { data: allReports = [], isLoading: loading, error } = useAllReports()
 
   // Extract status options for use in both quickFilters and columns
   const statusOptions = useMemo(() => {
-    return [...new Set(allReports.map((r) => r.status))].filter(Boolean)
+    return extractUniqueOptions(allReports, (r) => r.status)
   }, [allReports])
 
   // Generate quick filter options from data
   const quickFilters: QuickFilterConfig[] = useMemo(() => {
-    const teamOptions = [...new Set(allReports.map((r) => r.team?.name))].filter(Boolean)
-    const neighbourhoodOptions = [...new Set(allReports.map((r) => r.neighbourhood?.name))].filter(Boolean)
+    const teamOptions = extractUniqueOptions(allReports, (r) => r.team?.name)
+    const neighbourhoodOptions = extractUniqueOptions(allReports, (r) => r.neighbourhood?.name)
+
+    const createFilterConfig = (field: string, label: string, options: string[]): QuickFilterConfig => ({
+      field,
+      label,
+      placeholder: `Filter by ${label.toLowerCase().slice(0, -1)}`,
+      options: options.map((option) => ({ label: option, value: option })),
+    })
 
     return [
-      {
-        field: "status",
-        label: "Statuses",
-        placeholder: "Filter by status",
-        options: statusOptions.map((status) => ({ label: status, value: status })),
-      },
-      {
-        field: "team.name",
-        label: "Teams",
-        placeholder: "Filter by team",
-        options: teamOptions.map((team) => ({ label: team, value: team })),
-      },
-      {
-        field: "neighbourhood.name",
-        label: "Neighbourhoods",
-        placeholder: "Filter by neighbourhood",
-        options: neighbourhoodOptions.map((neighbourhood) => ({ label: neighbourhood, value: neighbourhood })),
-      },
+      createFilterConfig("status", "Statuses", statusOptions),
+      createFilterConfig("team.name", "Teams", teamOptions),
+      createFilterConfig("neighbourhood.name", "Neighbourhoods", neighbourhoodOptions),
     ]
   }, [allReports, statusOptions])
 
@@ -65,48 +64,134 @@ export function ReportsTable() {
     { key: "longitude", label: "Longitude", variant: "number", sortable: true, exportable: true },
   ], [statusOptions])
 
-  // Custom cell renderer for reports-specific styling
-  const renderCell = (value: any, column: ColumnConfig, row: Report) => {
-    if (column.key === "id") {
-      return <span className="font-mono text-sm">{value}</span>
+  // Helper functions for cell rendering
+  const renderIdCell = useCallback((value: any) => (
+    <span className="font-mono text-sm">{value}</span>
+  ), [])
+
+  const renderTitleCell = useCallback((value: any) => (
+    <span className="font-medium">{value}</span>
+  ), [])
+
+  const renderDescriptionCell = useCallback((value: any) => (
+    <span className="max-w-xs truncate">{value}</span>
+  ), [])
+
+  const renderStatusCell = useCallback((value: string) => {
+    const getStatusVariant = (status: string) => {
+      switch (status) {
+        case "completed":
+          return "default"
+        case "in_progress":
+          return "secondary"
+        case "cancelled":
+          return "destructive"
+        default:
+          return "outline"
+      }
     }
 
-    if (column.key === "title") {
-      return <span className="font-medium">{value}</span>
-    }
+    return (
+      <Badge variant={getStatusVariant(value)}>
+        {value}
+      </Badge>
+    )
+  }, [])
 
-    if (column.key === "description") {
-      return <span className="max-w-xs truncate">{value}</span>
-    }
-
-    if (column.key === "status") {
-      return (
-          <Badge
-              variant={
-                value === "completed"
-                    ? "default"
-                    : value === "in_progress"
-                        ? "secondary"
-                        : value === "cancelled"
-                            ? "destructive"
-                            : "outline"
-              }
-          >
-            {value}
-          </Badge>
-      )
-    }
-
-    if (column.key === "created_at" && value) {
+  const renderDateCell = useCallback((value: any) => {
+    if (!value) return "-"
+    try {
       return format(new Date(value), "MMM dd, yyyy HH:mm")
+    } catch {
+      return "-"
+    }
+  }, [])
+
+  const renderDefaultCell = useCallback((value: any) => value || "-", [])
+
+  // Define row actions
+  const actions: ActionItem[] = useMemo(() => [
+    {
+      id: "view",
+      label: "View Details",
+      icon: Eye,
+      onClick: (row: Report) => {
+        console.log("View report:", row.id)
+        // Add your view logic here
+      },
+    },
+    {
+      id: "edit",
+      label: "Edit Report",
+      icon: Edit,
+      onClick: (row: Report) => {
+        console.log("Edit report:", row.id)
+        // Add your edit logic here
+      },
+      disabled: (row: Report) => row.status === "completed",
+    },
+    {
+      id: "delete",
+      label: "Delete Report",
+      icon: Trash2,
+      variant: "destructive" as const,
+      onClick: (row: Report) => {
+        console.log("Delete report:", row.id)
+        // Add your delete logic here
+      },
+      disabled: (row: Report) => row.status === "completed",
+    },
+  ], [])
+
+  // Define bulk actions
+  const bulkActions: BulkActionItem[] = useMemo(() => [
+    {
+      id: "export",
+      label: "Export Selected",
+      icon: Download,
+      onClick: (selectedRows: Report[]) => {
+        console.log("Export reports:", selectedRows.map(r => r.id))
+        // Add your export logic here
+      },
+    },
+    {
+      id: "archive",
+      label: "Archive Selected",
+      icon: Archive,
+      onClick: (selectedRows: Report[]) => {
+        console.log("Archive reports:", selectedRows.map(r => r.id))
+        // Add your archive logic here
+      },
+      disabled: (selectedRows: Report[]) => selectedRows.some(r => r.status === "completed"),
+    },
+    {
+      id: "delete-bulk",
+      label: "Delete Selected",
+      icon: Trash2,
+      variant: "destructive" as const,
+      onClick: (selectedRows: Report[]) => {
+        console.log("Delete reports:", selectedRows.map(r => r.id))
+        // Add your bulk delete logic here
+      },
+      disabled: (selectedRows: Report[]) => selectedRows.some(r => r.status === "completed"),
+    },
+  ], [])
+
+  // Custom cell renderer for reports-specific styling
+  const renderCell = useCallback((value: any, column: ColumnConfig, row: Report) => {
+    const cellRenderers: Record<string, () => React.ReactNode> = {
+      id: () => renderIdCell(value),
+      title: () => renderTitleCell(value),
+      description: () => renderDescriptionCell(value),
+      status: () => renderStatusCell(value),
+      created_at: () => renderDateCell(value),
+      "neighbourhood.name": () => renderDefaultCell(value),
+      "team.name": () => renderDefaultCell(value),
     }
 
-    if (column.key === "neighbourhood.name" || column.key === "team.name") {
-      return value || "-"
-    }
-
-    return value || "-"
-  }
+    const renderer = cellRenderers[column.key]
+    return renderer ? renderer() : renderDefaultCell(value)
+  }, [renderIdCell, renderTitleCell, renderDescriptionCell, renderStatusCell, renderDateCell, renderDefaultCell])
 
   return (
       <DataTable<Report>
@@ -119,11 +204,13 @@ export function ReportsTable() {
           emptyMessage="No reports available"
           noResultsMessage="No reports match your filters"
           exportFilename="reports"
-          onRefresh={() => refetch()}
           loading={loading}
           error={error?.message || null}
           renderCell={renderCell}
           searchPlaceholder="Search by title, description, phone, neighbourhood, or team..."
+          actions={actions}
+          bulkActions={bulkActions}
+          enableSelection={true}
       />
   )
 }

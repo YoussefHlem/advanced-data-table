@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fetchAllReports, GET_ALL_REPORTS_QUERY, apolloClient } from "@/lib/graphql-client"
+import { fetchAllReports, GET_ALL_REPORTS_QUERY, DEFAULT_FETCH_LIMIT, apolloClient } from "@/lib/graphql-client"
 
 // Mock Apollo Client
 vi.mock('@apollo/client', async () => {
@@ -51,7 +51,7 @@ describe("GraphQL Client", () => {
 
     expect(mockQuery).toHaveBeenCalledWith({
       query: GET_ALL_REPORTS_QUERY,
-      variables: { first: 10000 },
+      variables: { first: DEFAULT_FETCH_LIMIT },
       fetchPolicy: 'cache-first',
     })
 

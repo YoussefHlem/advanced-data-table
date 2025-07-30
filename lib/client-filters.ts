@@ -1,19 +1,31 @@
 import type { FilterGroup, SortConfig } from "./types"
 
-export function getNestedValue(obj: any, path: string) {
+export function getNestedValue(obj: any, path: string): any {
+  if (!obj || !path) return undefined
   return path.split(".").reduce((current, key) => current?.[key], obj)
 }
 
-export function evaluateCondition(value: any, operator: string, filterValue: any): boolean {
+// Helper functions for specific condition evaluations
+function evaluateTextCondition(value: any, operator: string, filterValue: any): boolean {
+  const stringValue = String(value).toLowerCase()
+  const stringFilterValue = String(filterValue).toLowerCase()
+  
+  switch (operator) {
+    case "iLike":
+      return stringValue.includes(stringFilterValue)
+    case "notILike":
+      return !stringValue.includes(stringFilterValue)
+    default:
+      return false
+  }
+}
+
+function evaluateComparisonCondition(value: any, operator: string, filterValue: any): boolean {
   switch (operator) {
     case "eq":
       return value === filterValue
     case "ne":
       return value !== filterValue
-    case "iLike":
-      return String(value).toLowerCase().includes(String(filterValue).toLowerCase())
-    case "notILike":
-      return !String(value).toLowerCase().includes(String(filterValue).toLowerCase())
     case "lt":
       return value < filterValue
     case "lte":
@@ -22,32 +34,98 @@ export function evaluateCondition(value: any, operator: string, filterValue: any
       return value > filterValue
     case "gte":
       return value >= filterValue
-    case "isEmpty":
-      return !value || value === "" || value === null || value === undefined
-    case "isNotEmpty":
-      return value && value !== "" && value !== null && value !== undefined
-    case "inArray":
-      return Array.isArray(filterValue) && filterValue.includes(value)
-    case "notInArray":
-      return Array.isArray(filterValue) && !filterValue.includes(value)
-    case "isBetween":
-      if (filterValue?.min !== undefined && filterValue?.max !== undefined) {
-        return filterValue.min <= value && value <= filterValue.max
-      }
-      if (filterValue?.start && filterValue?.end) {
-        const startDate = new Date(filterValue.start).getTime()
-        const endDate = new Date(filterValue.end).getTime()
-        const valueDate = new Date(value).getTime()
-        return startDate <= valueDate && valueDate <= endDate
-      }
-      return false
-    case "isRelativeToToday":
-      console.warn(`Operator "${operator}" is not supported in client-side filtering`)
-      return true
     default:
-      console.warn(`Unknown operator: ${operator}`)
-      return true
+      return false
   }
+}
+
+function evaluateEmptyCondition(value: any, operator: string): boolean {
+  const isEmpty = !value || value === "" || value === null || value === undefined
+  
+  switch (operator) {
+    case "isEmpty":
+      return isEmpty
+    case "isNotEmpty":
+      return !isEmpty
+    default:
+      return false
+  }
+}
+
+function evaluateArrayCondition(value: any, operator: string, filterValue: any): boolean {
+  if (!Array.isArray(filterValue)) return false
+  
+  switch (operator) {
+    case "inArray":
+      return filterValue.includes(value)
+    case "notInArray":
+      return !filterValue.includes(value)
+    default:
+      return false
+  }
+}
+
+function evaluateBetweenCondition(value: any, filterValue: any): boolean {
+  // Numeric range
+  if (filterValue?.min !== undefined && filterValue?.max !== undefined) {
+    return filterValue.min <= value && value <= filterValue.max
+  }
+  
+  // Date range
+  if (filterValue?.start && filterValue?.end) {
+    try {
+      const startDate = new Date(filterValue.start).getTime()
+      const endDate = new Date(filterValue.end).getTime()
+      const valueDate = new Date(value).getTime()
+      
+      if (isNaN(startDate) || isNaN(endDate) || isNaN(valueDate)) {
+        return false
+      }
+      
+      return startDate <= valueDate && valueDate <= endDate
+    } catch {
+      return false
+    }
+  }
+  
+  return false
+}
+
+export function evaluateCondition(value: any, operator: string, filterValue: any): boolean {
+  // Handle text-based operators
+  if (["iLike", "notILike"].includes(operator)) {
+    return evaluateTextCondition(value, operator, filterValue)
+  }
+  
+  // Handle comparison operators
+  if (["eq", "ne", "lt", "lte", "gt", "gte"].includes(operator)) {
+    return evaluateComparisonCondition(value, operator, filterValue)
+  }
+  
+  // Handle empty/not empty operators
+  if (["isEmpty", "isNotEmpty"].includes(operator)) {
+    return evaluateEmptyCondition(value, operator)
+  }
+  
+  // Handle array operators
+  if (["inArray", "notInArray"].includes(operator)) {
+    return evaluateArrayCondition(value, operator, filterValue)
+  }
+  
+  // Handle between operator
+  if (operator === "isBetween") {
+    return evaluateBetweenCondition(value, filterValue)
+  }
+  
+  // Handle unsupported operators
+  if (operator === "isRelativeToToday") {
+    console.warn(`Operator "${operator}" is not supported in client-side filtering`)
+    return true
+  }
+  
+  // Handle unknown operators
+  console.warn(`Unknown operator: ${operator}`)
+  return true
 }
 
 export function applyFilters(data: any[], filterGroups: FilterGroup[]): any[] {
@@ -67,15 +145,17 @@ export function applyFilters(data: any[], filterGroups: FilterGroup[]): any[] {
   })
 }
 
-export function applySearch(data: any[], searchTerm: string, searchFields: string[]): any[] {
-  if (!searchTerm.trim()) return data
+export function applySearch<T>(data: T[], searchTerm: string, searchFields: string[]): T[] {
+  if (!searchTerm?.trim() || searchFields.length === 0) return data
 
-  const lowerSearchTerm = searchTerm.toLowerCase()
+  const lowerSearchTerm = searchTerm.toLowerCase().trim()
 
   return data.filter((item) => {
     return searchFields.some((field) => {
       const value = getNestedValue(item, field)
-      return String(value || "")
+      if (value === null || value === undefined) return false
+      
+      return String(value)
         .toLowerCase()
         .includes(lowerSearchTerm)
     })

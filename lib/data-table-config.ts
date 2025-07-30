@@ -69,7 +69,6 @@ export const dataTableConfig = {
   joinOperators: ["and", "or"] as const,
 }
 
-export type DataTableConfig = typeof dataTableConfig
 export type FilterVariant = (typeof dataTableConfig.filterVariants)[number]
 export type Operator = (typeof dataTableConfig.operators)[number]
 export type JoinOperator = (typeof dataTableConfig.joinOperators)[number]

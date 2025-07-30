@@ -27,3 +27,21 @@ export interface ColumnConfig {
   exportable?: boolean
   options?: { label: string; value: string }[]
 }
+
+export interface ActionItem {
+  id: string
+  label: string
+  icon?: React.ComponentType<{ className?: string }>
+  onClick: (row: any) => void
+  disabled?: (row: any) => boolean
+  variant?: "default" | "destructive"
+}
+
+export interface BulkActionItem {
+  id: string
+  label: string
+  icon?: React.ComponentType<{ className?: string }>
+  onClick: (selectedRows: any[]) => void
+  disabled?: (selectedRows: any[]) => boolean
+  variant?: "default" | "destructive"
+}

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -15,73 +15,98 @@ interface AdvancedFiltersProps {
   onFiltersChange: (groups: FilterGroup[]) => void
 }
 
-export function AdvancedFilters({ columns, filterGroups, onFiltersChange }: AdvancedFiltersProps) {
+// Helper functions for creating new filter elements
+function createNewFilterGroup(): FilterGroup {
+  return {
+    id: `group-${Date.now()}`,
+    conditions: [],
+    joinOperator: "and",
+  }
+}
+
+function createNewCondition(columns: ColumnConfig[]): FilterCondition {
+  const firstColumn = columns[0]
+  if (!firstColumn) {
+    throw new Error("No columns available for creating filter condition")
+  }
+  
+  return {
+    id: `condition-${Date.now()}`,
+    field: firstColumn.key,
+    operator: "eq",
+    value: null,
+    variant: firstColumn.variant,
+  }
+}
+
+export const AdvancedFilters = React.memo(function AdvancedFilters({ columns, filterGroups, onFiltersChange }: AdvancedFiltersProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   function addFilterGroup() {
-    const newGroup: FilterGroup = {
-      id: `group-${Date.now()}`,
-      conditions: [],
-      joinOperator: "and",
-    }
+    const newGroup = createNewFilterGroup()
     onFiltersChange([...filterGroups, newGroup])
   }
 
   function addCondition(groupId: string) {
-    const newCondition: FilterCondition = {
-      id: `condition-${Date.now()}`,
-      field: columns[0]?.key || "",
-      operator: "eq",
-      value: null,
-      variant: columns[0]?.variant || "text",
+    try {
+      const newCondition = createNewCondition(columns)
+      const updatedGroups = filterGroups.map((group) =>
+        group.id === groupId ? { ...group, conditions: [...group.conditions, newCondition] } : group,
+      )
+      onFiltersChange(updatedGroups)
+    } catch (error) {
+      console.error("Failed to add condition:", error)
     }
+  }
 
-    const updatedGroups = filterGroups.map((group) =>
-      group.id === groupId ? { ...group, conditions: [...group.conditions, newCondition] } : group,
-    )
+  // Helper function to update groups immutably
+  function updateFilterGroups(updater: (groups: FilterGroup[]) => FilterGroup[]) {
+    const updatedGroups = updater(filterGroups)
     onFiltersChange(updatedGroups)
   }
 
   function updateCondition(groupId: string, conditionId: string, updatedCondition: FilterCondition) {
-    const updatedGroups = filterGroups.map((group) =>
-      group.id === groupId
-        ? {
-            ...group,
-            conditions: group.conditions.map((condition) =>
-              condition.id === conditionId ? updatedCondition : condition,
-            ),
-          }
-        : group,
-    )
-    onFiltersChange(updatedGroups)
-  }
-
-  function removeCondition(groupId: string, conditionId: string) {
-    const updatedGroups = filterGroups
-      .map((group) =>
+    updateFilterGroups((groups) =>
+      groups.map((group) =>
         group.id === groupId
           ? {
               ...group,
-              conditions: group.conditions.filter((condition) => condition.id !== conditionId),
+              conditions: group.conditions.map((condition) =>
+                condition.id === conditionId ? updatedCondition : condition,
+              ),
             }
           : group,
       )
-      .filter((group) => group.conditions.length > 0)
+    )
+  }
 
-    onFiltersChange(updatedGroups)
+  function removeCondition(groupId: string, conditionId: string) {
+    updateFilterGroups((groups) =>
+      groups
+        .map((group) =>
+          group.id === groupId
+            ? {
+                ...group,
+                conditions: group.conditions.filter((condition) => condition.id !== conditionId),
+              }
+            : group,
+        )
+        .filter((group) => group.conditions.length > 0)
+    )
   }
 
   function updateGroupJoinOperator(groupId: string, joinOperator: JoinOperator) {
-    const updatedGroups = filterGroups.map((group) => (group.id === groupId ? { ...group, joinOperator } : group))
-    onFiltersChange(updatedGroups)
+    updateFilterGroups((groups) =>
+      groups.map((group) => (group.id === groupId ? { ...group, joinOperator } : group))
+    )
   }
 
   function removeFilterGroup(groupId: string) {
-    onFiltersChange(filterGroups.filter((group) => group.id !== groupId))
+    updateFilterGroups((groups) => groups.filter((group) => group.id !== groupId))
   }
 
   function clearAllFilters() {
-    onFiltersChange([])
+    updateFilterGroups(() => [])
   }
 
   const hasActiveFilters = filterGroups.some((group) => group.conditions.length > 0)
@@ -182,4 +207,4 @@ export function AdvancedFilters({ columns, filterGroups, onFiltersChange }: Adva
       )}
     </div>
   )
-}
+})
