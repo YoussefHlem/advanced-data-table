@@ -1,4 +1,4 @@
-import { DataTable } from "@/components/data-table/data-table"
+import { ReportsTable } from "@/components/data-table/reports-table"
 
 export default function Home() {
   return (
@@ -9,7 +9,7 @@ export default function Home() {
           Comprehensive data table with advanced filtering, sorting, and export capabilities
         </p>
       </div>
-      <DataTable />
+      <ReportsTable />
     </div>
   )
 }

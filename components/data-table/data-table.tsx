@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import {
   ArrowUpDown,
   ArrowUp,
@@ -20,86 +19,79 @@ import {
   ChevronsRight,
 } from "lucide-react"
 import { AdvancedFilters } from "./advanced-filters"
-import { fetchAllReports, type Report } from "@/lib/graphql-client"
 import { applyFilters, applySearch, applyQuickFilters, applySorting, applyPagination } from "@/lib/client-filters"
 import type { FilterGroup, SortConfig, ColumnConfig } from "@/lib/types"
 import { format } from "date-fns"
+import {QueryObserverResult} from "@tanstack/react-query";
 
-const COLUMNS: ColumnConfig[] = [
-  { key: "id", label: "ID", variant: "text", sortable: true, exportable: true },
-  { key: "title", label: "Title", variant: "text", sortable: true, exportable: true },
-  { key: "description", label: "Description", variant: "text", sortable: true, exportable: true },
-  {
-    key: "status",
-    label: "Status",
-    variant: "select",
-    sortable: true,
-    exportable: true,
-    options: [
-      { label: "Pending", value: "pending" },
-      { label: "In Progress", value: "in_progress" },
-      { label: "Completed", value: "completed" },
-      { label: "Cancelled", value: "cancelled" },
-    ],
-  },
-  { key: "client_phone", label: "Client Phone", variant: "text", sortable: true, exportable: true },
-  { key: "created_at", label: "Created At", variant: "date", sortable: true, exportable: true },
-  { key: "neighbourhood.name", label: "Neighbourhood", variant: "text", sortable: true, exportable: true },
-  { key: "team.name", label: "Team", variant: "text", sortable: true, exportable: true },
-  { key: "latitude", label: "Latitude", variant: "number", sortable: true, exportable: true },
-  { key: "longitude", label: "Longitude", variant: "number", sortable: true, exportable: true },
-]
+export interface QuickFilterConfig {
+  field: string
+  label: string
+  placeholder: string
+  options: { label: string; value: string }[]
+}
 
-const SEARCH_FIELDS = ["title", "description", "client_phone", "neighbourhood.name", "team.name"]
+export interface DataTableProps<T = any> {
+  data: T[]
+  columns: ColumnConfig[]
+  searchFields: string[]
+  quickFilters?: QuickFilterConfig[]
+  title?: string
+  loadingMessage?: string
+  emptyMessage?: string
+  noResultsMessage?: string
+  exportFilename?: string
+  onRefresh?: () => Promise<QueryObserverResult<T[], Error>>
+  loading?: boolean
+  error?: string | null
+  renderCell?: (value: any, column: ColumnConfig, row: T) => React.ReactNode
+  searchPlaceholder?: string
+}
 
-export function DataTable() {
-  // Data state
-  const [allReports, setAllReports] = useState<Report[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
+export function DataTable<T = any>({
+  data,
+  columns,
+  searchFields,
+  quickFilters = [],
+  title = "Data Table",
+  loadingMessage = "Loading data...",
+  emptyMessage = "No data available",
+  noResultsMessage = "No data matches your filters",
+  exportFilename = "data",
+  onRefresh,
+  loading = false,
+  error = null,
+  renderCell,
+  searchPlaceholder = "Search...",
+}: DataTableProps<T>) {
   // Filter and search state
   const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [quickFilters, setQuickFilters] = useState({
-    status: "",
-    "team.name": "",
-    "neighbourhood.name": "",
-  })
+  const [quickFilterValues, setQuickFilterValues] = useState<Record<string, string>>({})
 
   // Sorting and pagination state
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: "created_at", order: "desc" })
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ field: "", order: "desc" })
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
 
-  // Load all data initially
-  const loadAllReports = async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
-      const reports = await fetchAllReports()
-      setAllReports(reports)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load reports")
-    } finally {
-      setLoading(false)
-    }
-  }
-
+  // Initialize quick filter values
   useEffect(() => {
-    loadAllReports()
-  }, [])
+    const initialValues: Record<string, string> = {}
+    quickFilters.forEach((filter) => {
+      initialValues[filter.field] = ""
+    })
+    setQuickFilterValues(initialValues)
+  }, [quickFilters])
 
   // Apply all client-side processing
   const processedData = useMemo(() => {
-    let filteredData = allReports
+    let filteredData = data
 
     // Apply search
-    filteredData = applySearch(filteredData, searchTerm, SEARCH_FIELDS)
+    filteredData = applySearch(filteredData, searchTerm, searchFields)
 
     // Apply quick filters
-    filteredData = applyQuickFilters(filteredData, quickFilters)
+    filteredData = applyQuickFilters(filteredData, quickFilterValues)
 
     // Apply advanced filters
     filteredData = applyFilters(filteredData, filterGroups)
@@ -109,12 +101,12 @@ export function DataTable() {
 
     // Apply pagination
     return applyPagination(filteredData, currentPage, pageSize)
-  }, [allReports, searchTerm, quickFilters, filterGroups, sortConfig, currentPage, pageSize])
+  }, [data, searchTerm, quickFilterValues, filterGroups, sortConfig, currentPage, pageSize])
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, quickFilters, filterGroups])
+  }, [searchTerm, quickFilterValues, filterGroups])
 
   function handleSort(field: string) {
     setSortConfig((prev) => ({
@@ -124,27 +116,27 @@ export function DataTable() {
   }
 
   function handleQuickFilterChange(field: string, value: string) {
-    setQuickFilters((prev) => ({
+    setQuickFilterValues((prev) => ({
       ...prev,
       [field]: value === "all" ? "" : value,
     }))
   }
 
   function exportToCSV() {
-    const exportableColumns = COLUMNS.filter((col) => col.exportable)
+    const exportableColumns = columns.filter((col) => col.exportable)
     const headers = exportableColumns.map((col) => col.label).join(",")
 
     // Export all filtered data (not just current page)
-    let exportData = allReports
-    exportData = applySearch(exportData, searchTerm, SEARCH_FIELDS)
-    exportData = applyQuickFilters(exportData, quickFilters)
+    let exportData = data
+    exportData = applySearch(exportData, searchTerm, searchFields)
+    exportData = applyQuickFilters(exportData, quickFilterValues)
     exportData = applyFilters(exportData, filterGroups)
     exportData = applySorting(exportData, sortConfig)
 
-    const rows = exportData.map((report) =>
+    const rows = exportData.map((item) =>
       exportableColumns
         .map((col) => {
-          const value = getNestedValue(report, col.key)
+          const value = getNestedValue(item, col.key)
           if (col.variant === "date" && value) {
             return format(new Date(value), "yyyy-MM-dd HH:mm:ss")
           }
@@ -159,7 +151,7 @@ export function DataTable() {
 
     const a = document.createElement("a")
     a.href = url
-    a.download = `reports-${format(new Date(), "yyyy-MM-dd")}.csv`
+    a.download = `${exportFilename}-${format(new Date(), "yyyy-MM-dd")}.csv`
     a.click()
 
     URL.revokeObjectURL(url)
@@ -189,34 +181,32 @@ export function DataTable() {
     }
   }
 
-  // Get unique values for quick filter options
-  const statusOptions = useMemo(() => {
-    const statuses = [...new Set(allReports.map((r) => r.status))].filter(Boolean)
-    return statuses.map((status) => ({ label: status, value: status }))
-  }, [allReports])
+  function clearAllFilters() {
+    setSearchTerm("")
+    const clearedQuickFilters: Record<string, string> = {}
+    quickFilters.forEach((filter) => {
+      clearedQuickFilters[filter.field] = ""
+    })
+    setQuickFilterValues(clearedQuickFilters)
+    setFilterGroups([])
+  }
 
-  const teamOptions = useMemo(() => {
-    const teams = [...new Set(allReports.map((r) => r.team?.name))].filter(Boolean)
-    return teams.map((team) => ({ label: team, value: team }))
-  }, [allReports])
-
-  const neighbourhoodOptions = useMemo(() => {
-    const neighbourhoods = [...new Set(allReports.map((r) => r.neighbourhood?.name))].filter(Boolean)
-    return neighbourhoods.map((neighbourhood) => ({ label: neighbourhood, value: neighbourhood }))
-  }, [allReports])
+  const hasActiveFilters = searchTerm || Object.values(quickFilterValues).some(Boolean) || filterGroups.length > 0
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
-            <span>Reports Data Table</span>
+            <span>{title}</span>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">{processedData.pagination.totalItems} total records</span>
-              <Button variant="outline" size="sm" onClick={loadAllReports} disabled={loading}>
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
+              {onRefresh && (
+                <Button variant="outline" size="sm" onClick={onRefresh} disabled={loading}>
+                  <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              )}
               <Button variant="outline" size="sm" onClick={exportToCSV} disabled={processedData.data.length === 0}>
                 <Download className="h-4 w-4" />
                 Export CSV
@@ -230,83 +220,44 @@ export function DataTable() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search by title, description, phone, neighbourhood, or team..."
+                placeholder={searchPlaceholder}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
               />
             </div>
 
-            <Select
-              value={quickFilters.status || "all"}
-              onValueChange={(value) => handleQuickFilterChange("status", value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                {statusOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={quickFilters["team.name"] || "all"}
-              onValueChange={(value) => handleQuickFilterChange("team.name", value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by team" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Teams</SelectItem>
-                {teamOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select
-              value={quickFilters["neighbourhood.name"] || "all"}
-              onValueChange={(value) => handleQuickFilterChange("neighbourhood.name", value)}
-            >
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Filter by neighbourhood" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Neighbourhoods</SelectItem>
-                {neighbourhoodOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {quickFilters.map((filter) => (
+              <Select
+                key={filter.field}
+                value={quickFilterValues[filter.field] || "all"}
+                onValueChange={(value) => handleQuickFilterChange(filter.field, value)}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder={filter.placeholder} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All {filter.label}</SelectItem>
+                  {filter.options.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ))}
           </div>
 
           {/* Advanced Filters */}
-          <AdvancedFilters columns={COLUMNS} filterGroups={filterGroups} onFiltersChange={setFilterGroups} />
+          <AdvancedFilters columns={columns} filterGroups={filterGroups} onFiltersChange={setFilterGroups} />
 
           {/* Filter Summary */}
-          {(searchTerm || Object.values(quickFilters).some(Boolean) || filterGroups.length > 0) && (
+          {hasActiveFilters && (
             <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
               <span className="text-sm text-muted-foreground">
-                Showing {processedData.pagination.totalItems} of {allReports.length} records
+                Showing {processedData.pagination.totalItems} of {data.length} records
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchTerm("")
-                  setQuickFilters({ status: "", "team.name": "", "neighbourhood.name": "" })
-                  setFilterGroups([])
-                }}
-              >
+              <Button variant="ghost" size="sm" onClick={clearAllFilters}>
                 Clear All Filters
               </Button>
             </div>
@@ -324,7 +275,7 @@ export function DataTable() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  {COLUMNS.map((column) => (
+                  {columns.map((column) => (
                     <TableHead key={column.key}>
                       {column.sortable ? (
                         <Button
@@ -345,46 +296,28 @@ export function DataTable() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length} className="text-center py-8">
+                    <TableCell colSpan={columns.length} className="text-center py-8">
                       <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
-                      Loading reports...
+                      {loadingMessage}
                     </TableCell>
                   </TableRow>
                 ) : processedData.data.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={COLUMNS.length} className="text-center py-8 text-muted-foreground">
-                      {allReports.length === 0 ? "No reports available" : "No reports match your filters"}
+                    <TableCell colSpan={columns.length} className="text-center py-8 text-muted-foreground">
+                      {data.length === 0 ? emptyMessage : noResultsMessage}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  processedData.data.map((report) => (
-                    <TableRow key={report.id}>
-                      <TableCell className="font-mono text-sm">{report.id}</TableCell>
-                      <TableCell className="font-medium">{report.title}</TableCell>
-                      <TableCell className="max-w-xs truncate">{report.description}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={
-                            report.status === "completed"
-                              ? "default"
-                              : report.status === "in_progress"
-                                ? "secondary"
-                                : report.status === "cancelled"
-                                  ? "destructive"
-                                  : "outline"
-                          }
-                        >
-                          {report.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{report.client_phone}</TableCell>
-                      <TableCell>
-                        {formatCellValue(report.created_at, COLUMNS.find((c) => c.key === "created_at")!)}
-                      </TableCell>
-                      <TableCell>{report.neighbourhood?.name || "-"}</TableCell>
-                      <TableCell>{report.team?.name || "-"}</TableCell>
-                      <TableCell>{report.latitude}</TableCell>
-                      <TableCell>{report.longitude}</TableCell>
+                  processedData.data.map((item, index) => (
+                    <TableRow key={index}>
+                      {columns.map((column) => {
+                        const value = getNestedValue(item, column.key)
+                        return (
+                          <TableCell key={column.key}>
+                            {renderCell ? renderCell(value, column, item) : formatCellValue(value, column)}
+                          </TableCell>
+                        )
+                      })}
                     </TableRow>
                   ))
                 )}

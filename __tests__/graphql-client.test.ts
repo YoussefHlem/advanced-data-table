@@ -1,8 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { fetchAllReports, GET_ALL_REPORTS_QUERY } from "@/lib/graphql-client"
+import { fetchAllReports, GET_ALL_REPORTS_QUERY, apolloClient } from "@/lib/graphql-client"
 
-// Mock fetch
-global.fetch = vi.fn()
+// Mock Apollo Client
+vi.mock('@apollo/client', async () => {
+  const actual = await vi.importActual('@apollo/client')
+  return {
+    ...actual,
+    ApolloClient: vi.fn(),
+    InMemoryCache: vi.fn(),
+    createHttpLink: vi.fn(),
+    gql: vi.fn((query) => query),
+  }
+})
+
+// Mock the apolloClient.query method
+const mockQuery = vi.fn()
+vi.mocked(apolloClient).query = mockQuery
 
 describe("GraphQL Client", () => {
   beforeEach(() => {
@@ -31,22 +44,15 @@ describe("GraphQL Client", () => {
         },
       },
     }
-    ;(fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockResponse,
-    })
+    
+    mockQuery.mockResolvedValueOnce(mockResponse)
 
     const result = await fetchAllReports()
 
-    expect(fetch).toHaveBeenCalledWith("https://unstage.bitech.com.sa/api/v1/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: GET_ALL_REPORTS_QUERY,
-        variables: { first: 1000 },
-      }),
+    expect(mockQuery).toHaveBeenCalledWith({
+      query: GET_ALL_REPORTS_QUERY,
+      variables: { first: 10000 },
+      fetchPolicy: 'cache-first',
     })
 
     expect(result).toEqual(mockResponse.data.reports.data)
@@ -55,22 +61,20 @@ describe("GraphQL Client", () => {
   it("should handle GraphQL errors", async () => {
     const mockErrorResponse = {
       errors: [{ message: "GraphQL error occurred" }],
+      data: null,
     }
-    ;(fetch as any).mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockErrorResponse,
-    })
+    
+    mockQuery.mockResolvedValueOnce(mockErrorResponse)
 
     await expect(fetchAllReports()).rejects.toThrow("GraphQL error occurred")
   })
 
   it("should handle network errors", async () => {
-    ;(fetch as any).mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-    })
+    const networkError = new Error("Network error")
+    
+    mockQuery.mockRejectedValueOnce(networkError)
 
-    await expect(fetchAllReports()).rejects.toThrow("Failed to fetch reports")
+    await expect(fetchAllReports()).rejects.toThrow("Failed to fetch reports: Network error")
   })
 
   it("should use correct query structure", () => {
