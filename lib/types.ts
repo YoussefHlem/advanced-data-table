@@ -25,6 +25,7 @@ export interface ColumnConfig {
   variant: FilterVariant
   sortable?: boolean
   exportable?: boolean
+  visible?: boolean
   options?: { label: string; value: string }[]
 }
 

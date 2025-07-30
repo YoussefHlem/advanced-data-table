@@ -1,0 +1,814 @@
+warning: in the working copy of '__tests__/client-filters.test.ts', LF will be replaced by CRLF the next time Git touches it
+diff --git a/__tests__/client-filters.test.ts b/__tests__/client-filters.test.ts
+index 1cb2710..feb2376 100644
+--- a/__tests__/client-filters.test.ts
++++ b/__tests__/client-filters.test.ts
+@@ -3,7 +3,6 @@ import {
+   evaluateCondition,
+   applyFilters,
+   applySearch,
+-  applyQuickFilters,
+   applySorting,
+   applyPagination,
+   getNestedValue,
+@@ -172,33 +171,6 @@ describe("Client-Side Filtering", () => {
+     })
+   })
+
+-  describe("applyQuickFilters", () => {
+-    it("should filter by single quick filter", () => {
+-      const quickFilters = { status: "pending" }
+-      const result = applyQuickFilters(sampleData, quickFilters)
+-      expect(result).toHaveLength(1)
+-      expect(result[0].status).toBe("pending")
+-    })
+-
+-    it("should filter by multiple quick filters", () => {
+-      const quickFilters = { status: "pending", "neighbourhood.name": "Downtown" }
+-      const result = applyQuickFilters(sampleData, quickFilters)
+-      expect(result).toHaveLength(1)
+-      expect(result[0].id).toBe("1")
+-    })
+-
+-    it("should ignore empty filter values", () => {
+-      const quickFilters = { status: "", "neighbourhood.name": "Downtown" }
+-      const result = applyQuickFilters(sampleData, quickFilters)
+-      expect(result).toHaveLength(2)
+-    })
+-
+-    it("should ignore 'all' filter values", () => {
+-      const quickFilters = { status: "all", "neighbourhood.name": "Downtown" }
+-      const result = applyQuickFilters(sampleData, quickFilters)
+-      expect(result).toHaveLength(2)
+-    })
+-  })
+   describe("applySorting", () => {
+     it("should sort by string field ascending", () => {
+@@ -323,17 +295,13 @@ describe("Integration Tests", () => {
+   ]
+   it("should apply all filters in correct order", () => {
+-    // Search -> Quick Filters -> Advanced Filters -> Sort -> Paginate
++    // Search -> Advanced Filters -> Sort -> Paginate
+     let result = sampleData
+     // Apply search
+     result = applySearch(result, "repair", ["title", "description"])
+     expect(result).toHaveLength(1)
+-    // Apply quick filters (should not affect since search already filtered)
+-    result = applyQuickFilters(result, { status: "in_progress" })
+-    expect(result).toHaveLength(1)
+-
+     // Apply advanced filters
+     const filterGroups: FilterGroup[] = [
+       {
+diff --git a/components/data-table/advanced-filters.tsx b/components/data-table/advanced-filters.tsx
+index dbfc21f..920533c 100644
+--- a/components/data-table/advanced-filters.tsx
++++ b/components/data-table/advanced-filters.tsx
+@@ -2,7 +2,7 @@
+ import React, { useState } from "react"
+ import { Button } from "@/components/ui/button"
+-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
++import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+ import { Plus, Filter } from "lucide-react"
+ import { FilterConditionComponent } from "./filter-condition"
+@@ -112,99 +112,100 @@ export const AdvancedFilters = React.memo(function AdvancedFilters({ columns, fi
+   const hasActiveFilters = filterGroups.some((group) => group.conditions.length > 0)
+   return (
+-    <div className="space-y-4">
+-      <div className="flex items-center justify-between">
+-        <Button variant="outline" onClick={() => setIsOpen(!isOpen)} className="flex items-center gap-2">
+-          <Filter className="h-4 w-4" />
+-          Advanced Filters
+-          {hasActiveFilters && (
+-            <span className="ml-2 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full">
+-              {filterGroups.reduce((acc, group) => acc + group.conditions.length, 0)}
+-            </span>
+-          )}
+-        </Button>
+-
+-        {hasActiveFilters && (
+-          <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+-            Clear All
++    <div className="flex items-center gap-2">
++      <Popover open={isOpen} onOpenChange={setIsOpen}>
++        <PopoverTrigger asChild>
++          <Button variant="outline" className="flex items-center gap-2">
++            <Filter className="h-4 w-4" />
++            Advanced Filters
++            {hasActiveFilters && (
++              <span className="ml-2 px-2 py-1 text-xs bg-primary text-primary-foreground rounded-full">
++                {filterGroups.reduce((acc, group) => acc + group.conditions.length, 0)}
++              </span>
++            )}
+           </Button>
+-        )}
+-      </div>
+-
+-      {isOpen && (
+-        <Card>
+-          <CardHeader>
+-            <CardTitle className="text-lg">Filter Configuration</CardTitle>
+-          </CardHeader>
+-          <CardContent className="space-y-6">
+-            {filterGroups.map((group, groupIndex) => (
+-              <div key={group.id} className="space-y-4">
+-                {groupIndex > 0 && (
+-                  <div className="flex items-center justify-center">
+-                    <span className="px-3 py-1 bg-muted rounded-full text-sm font-medium">OR</span>
+-                  </div>
+-                )}
+-
+-                <div className="border rounded-lg p-4 space-y-4">
+-                  <div className="flex items-center justify-between">
+-                    <Select
+-                      value={group.joinOperator}
+-                      onValueChange={(value) => updateGroupJoinOperator(group.id, value as JoinOperator)}
++        </PopoverTrigger>
++        <PopoverContent className="w-[800px] max-w-[90vw] p-0" align="start">
++          <div className="p-6 space-y-6">
++            <div className="flex items-center justify-between">
++              <h3 className="text-lg font-semibold">Filter Configuration</h3>
++              {hasActiveFilters && (
++                <Button variant="ghost" size="sm" onClick={clearAllFilters}>
++                  Clear All
++                </Button>
++              )}
++            </div>
++
++            <div className="space-y-6">
++              {filterGroups.map((group, groupIndex) => (
++                <div key={group.id} className="space-y-4">
++                  {groupIndex > 0 && (
++                    <div className="flex items-center justify-center">
++                      <span className="px-3 py-1 bg-muted rounded-full text-sm font-medium">OR</span>
++                    </div>
++                  )}
++
++                  <div className="border rounded-lg p-4 space-y-4">
++                    <div className="flex items-center justify-between">
++                      <Select
++                        value={group.joinOperator}
++                        onValueChange={(value) => updateGroupJoinOperator(group.id, value as JoinOperator)}
++                      >
++                        <SelectTrigger className="w-[120px]">
++                          <SelectValue />
++                        </SelectTrigger>
++                        <SelectContent>
++                          <SelectItem value="and">AND</SelectItem>
++                          <SelectItem value="or">OR</SelectItem>
++                        </SelectContent>
++                      </Select>
++
++                      <Button variant="ghost" size="sm" onClick={() => removeFilterGroup(group.id)}>
++                        Remove Group
++                      </Button>
++                    </div>
++
++                    <div className="space-y-3">
++                      {group.conditions.map((condition, conditionIndex) => (
++                        <div key={condition.id}>
++                          {conditionIndex > 0 && (
++                            <div className="flex items-center justify-center py-2">
++                              <span className="px-2 py-1 bg-muted rounded text-xs font-medium">
++                                {group.joinOperator.toUpperCase()}
++                              </span>
++                            </div>
++                          )}
++                          <FilterConditionComponent
++                            condition={condition}
++                            columns={columns}
++                            onUpdate={(updatedCondition) => updateCondition(group.id, condition.id, updatedCondition)}
++                            onRemove={() => removeCondition(group.id, condition.id)}
++                          />
++                        </div>
++                      ))}
++                    </div>
++
++                    <Button
++                      variant="outline"
++                      size="sm"
++                      onClick={() => addCondition(group.id)}
++                      className="flex items-center gap-2"
+                     >
+-                      <SelectTrigger className="w-[120px]">
+-                        <SelectValue />
+-                      </SelectTrigger>
+-                      <SelectContent>
+-                        <SelectItem value="and">AND</SelectItem>
+-                        <SelectItem value="or">OR</SelectItem>
+-                      </SelectContent>
+-                    </Select>
+-
+-                    <Button variant="ghost" size="sm" onClick={() => removeFilterGroup(group.id)}>
+-                      Remove Group
++                      <Plus className="h-4 w-4" />
++                      Add Condition
+                     </Button>
+                   </div>
+-
+-                  <div className="space-y-3">
+-                    {group.conditions.map((condition, conditionIndex) => (
+-                      <div key={condition.id}>
+-                        {conditionIndex > 0 && (
+-                          <div className="flex items-center justify-center py-2">
+-                            <span className="px-2 py-1 bg-muted rounded text-xs font-medium">
+-                              {group.joinOperator.toUpperCase()}
+-                            </span>
+-                          </div>
+-                        )}
+-                        <FilterConditionComponent
+-                          condition={condition}
+-                          columns={columns}
+-                          onUpdate={(updatedCondition) => updateCondition(group.id, condition.id, updatedCondition)}
+-                          onRemove={() => removeCondition(group.id, condition.id)}
+-                        />
+-                      </div>
+-                    ))}
+-                  </div>
+-
+-                  <Button
+-                    variant="outline"
+-                    size="sm"
+-                    onClick={() => addCondition(group.id)}
+-                    className="flex items-center gap-2"
+-                  >
+-                    <Plus className="h-4 w-4" />
+-                    Add Condition
+-                  </Button>
+                 </div>
+-              </div>
+-            ))}
+-
+-            <Button variant="outline" onClick={addFilterGroup} className="flex items-center gap-2 bg-transparent">
+-              <Plus className="h-4 w-4" />
+-              Add Filter Group
+-            </Button>
+-          </CardContent>
+-        </Card>
+-      )}
++              ))}
++
++              <Button variant="outline" onClick={addFilterGroup} className="flex items-center gap-2 bg-transparent">
++                <Plus className="h-4 w-4" />
++                Add Filter Group
++              </Button>
++            </div>
++          </div>
++        </PopoverContent>
++      </Popover>
+     </div>
+   )
+ })
+diff --git a/components/data-table/data-table-search.tsx b/components/data-table/data-table-search.tsx
+index 1248315..a3075c1 100644
+--- a/components/data-table/data-table-search.tsx
++++ b/components/data-table/data-table-search.tsx
+@@ -1,63 +1,27 @@
+ import React from "react"
+ import { Input } from "@/components/ui/input"
+-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+ import { Search } from "lucide-react"
+-export interface QuickFilterConfig {
+-  field: string
+-  label: string
+-  placeholder: string
+-  options: { label: string; value: string }[]
+-}
+-
+ interface DataTableSearchProps {
+   searchTerm: string
+   searchPlaceholder: string
+-  quickFilters: QuickFilterConfig[]
+-  quickFilterValues: Record<string, string>
+   onSearchChange: (value: string) => void
+-  onQuickFilterChange: (field: string, value: string) => void
+ }
+ export const DataTableSearch = React.memo(function DataTableSearch({
+   searchTerm,
+   searchPlaceholder,
+-  quickFilters,
+-  quickFilterValues,
+   onSearchChange,
+-  onQuickFilterChange,
+ }: DataTableSearchProps) {
+   return (
+-    <div className="flex flex-col sm:flex-row gap-4">
+-      <div className="relative flex-1">
+-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+-        <Input
+-          placeholder={searchPlaceholder}
+-          value={searchTerm}
+-          onChange={(e) => onSearchChange(e.target.value)}
+-          className="pl-10"
+-        />
+-      </div>
+-
+-      {quickFilters.map((filter) => (
+-        <Select
+-          key={filter.field}
+-          value={quickFilterValues[filter.field] || "all"}
+-          onValueChange={(value) => onQuickFilterChange(filter.field, value)}
+-        >
+-          <SelectTrigger className="w-[180px]">
+-            <SelectValue placeholder={filter.placeholder} />
+-          </SelectTrigger>
+-          <SelectContent>
+-            <SelectItem value="all">All {filter.label}</SelectItem>
+-            {filter.options.map((option) => (
+-              <SelectItem key={option.value} value={option.value}>
+-                {option.label}
+-              </SelectItem>
+-            ))}
+-          </SelectContent>
+-        </Select>
+-      ))}
++    <div className="relative">
++      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
++      <Input
++        placeholder={searchPlaceholder}
++        value={searchTerm}
++        onChange={(e) => onSearchChange(e.target.value)}
++        className="pl-10 max-w-[220px]"
++      />
+     </div>
+   )
+ })
+\ No newline at end of file
+diff --git a/components/data-table/data-table.tsx b/components/data-table/data-table.tsx
+index f18729f..045a279 100644
+--- a/components/data-table/data-table.tsx
++++ b/components/data-table/data-table.tsx
+@@ -12,23 +12,22 @@ import {
+ } from "lucide-react"
+ import { AdvancedFilters } from "./advanced-filters"
+ import { DataTableHeader } from "./data-table-header"
+-import { DataTableSearch, type QuickFilterConfig } from "./data-table-search"
++import { DataTableSearch } from "./data-table-search"
+ import { DataTablePagination } from "./data-table-pagination"
+-import { applyFilters, applySearch, applyQuickFilters, applySorting, applyPagination } from "@/lib/client-filters"
++import { ColumnVisibilityToggle } from "./column-visibility-toggle"
++import { applyFilters, applySearch, applySorting, applyPagination } from "@/lib/client-filters"
+ import { getNestedValue, formatCellValue, exportDataToCSV, DEFAULT_PAGE_SIZE } from "@/lib/data-table-utils"
+ import type { FilterGroup, SortConfig, ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
+ import { FloatingActionBar } from "./floating-action-bar"
+ import { ActionsColumn } from "./actions-column"
+ import { Checkbox } from "@/components/ui/checkbox"
+ import { useDebounce } from "@/lib/use-debounce"
+-import { TableSkeleton } from "./table-skeleton"
+ export interface DataTableProps<T = any> {
+   data: T[]
+   columns: ColumnConfig[]
+   searchFields: string[]
+-  quickFilters?: QuickFilterConfig[]
+   title?: string
+   loadingMessage?: string
+   emptyMessage?: string
+@@ -41,13 +40,14 @@ export interface DataTableProps<T = any> {
+   actions?: ActionItem[]
+   bulkActions?: BulkActionItem[]
+   enableSelection?: boolean
++  onCreateNew?: () => void
++  createButtonLabel?: string
+ }
+ export function DataTable<T = any>({
+   data,
+   columns,
+   searchFields,
+-  quickFilters = [],
+   title = "Data Table",
+   loadingMessage = "Loading data...",
+   emptyMessage = "No data available",
+@@ -60,16 +60,24 @@ export function DataTable<T = any>({
+   actions = [],
+   bulkActions = [],
+   enableSelection = false,
++  onCreateNew,
++  createButtonLabel = "Create New",
+ }: DataTableProps<T>) {
+   // Filter and search state
+   const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([])
+-  const [pendingFilterGroups, setPendingFilterGroups] = useState<FilterGroup[]>([])
+   const [searchTerm, setSearchTerm] = useState("")
+-  const [quickFilterValues, setQuickFilterValues] = useState<Record<string, string>>({})
++
++  // Column visibility state
++  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
++    // Initialize all columns as visible by default
++    return columns.reduce((acc, column) => {
++      acc[column.key] = column.visible !== false
++      return acc
++    }, {} as Record<string, boolean>)
++  })
+   // Debounced values for performance optimization
+   const debouncedSearchTerm = useDebounce(searchTerm, 300) // 300ms delay for search
+-  const debouncedQuickFilterValues = useDebounce(quickFilterValues, 500) // 500ms delay for filters
+   const debouncedFilterGroups = useDebounce(filterGroups, 500) // 500ms delay for advanced filters
+   // Sorting and pagination state
+@@ -84,19 +92,14 @@ export function DataTable<T = any>({
+   // Transition state for non-urgent updates
+   const [isPending, startTransition] = useTransition()
+-  // Initialize quick filter values
+-  useEffect(() => {
+-    const initialValues: Record<string, string> = {}
+-    quickFilters.forEach((filter) => {
+-      initialValues[filter.field] = ""
+-    })
+-    setQuickFilterValues(initialValues)
+-  }, [quickFilters])
++  // Compute visible columns
++  const visibleColumns = useMemo(() => {
++    return columns.map(column => ({
++      ...column,
++      visible: columnVisibility[column.key] !== false
++    })).filter(column => column.visible)
++  }, [columns, columnVisibility])
+-  // Initialize pending filters to match applied filters
+-  useEffect(() => {
+-    setPendingFilterGroups(filterGroups)
+-  }, [filterGroups])
+   // Apply all client-side processing
+   const processedData = useMemo(() => {
+@@ -105,9 +108,6 @@ export function DataTable<T = any>({
+     // Apply search (using debounced value)
+     filteredData = applySearch(filteredData, debouncedSearchTerm, searchFields)
+-    // Apply quick filters (using debounced value)
+-    filteredData = applyQuickFilters(filteredData, debouncedQuickFilterValues)
+-
+     // Apply advanced filters (using debounced value)
+     filteredData = applyFilters(filteredData, debouncedFilterGroups)
+@@ -116,12 +116,12 @@ export function DataTable<T = any>({
+     // Apply pagination
+     return applyPagination(filteredData, currentPage, pageSize)
+-  }, [data, debouncedSearchTerm, debouncedQuickFilterValues, debouncedFilterGroups, sortConfig, currentPage, pageSize, searchFields])
++  }, [data, debouncedSearchTerm, debouncedFilterGroups, sortConfig, currentPage, pageSize, searchFields])
+   // Reset to first page when filters change (using debounced values)
+   useEffect(() => {
+     setCurrentPage(1)
+-  }, [debouncedSearchTerm, debouncedQuickFilterValues, debouncedFilterGroups])
++  }, [debouncedSearchTerm, debouncedFilterGroups])
+   const handleSort = useCallback((field: string) => {
+     startTransition(() => {
+@@ -132,25 +132,15 @@ export function DataTable<T = any>({
+     })
+   }, [startTransition])
+-  const handleQuickFilterChange = useCallback((field: string, value: string) => {
+-    startTransition(() => {
+-      setQuickFilterValues((prev) => ({
+-        ...prev,
+-        [field]: value === "all" ? "" : value,
+-      }))
+-    })
+-  }, [startTransition])
+   const handleExportToCSV = useCallback(() => {
+     // Export all filtered data (not just current page) using debounced values
+     let exportData = data
+     exportData = applySearch(exportData, debouncedSearchTerm, searchFields)
+-    exportData = applyQuickFilters(exportData, debouncedQuickFilterValues)
+     exportData = applyFilters(exportData, debouncedFilterGroups)
+     exportData = applySorting(exportData, sortConfig)
+-
+     exportDataToCSV(exportData, columns, exportFilename)
+-  }, [data, debouncedSearchTerm, searchFields, debouncedQuickFilterValues, debouncedFilterGroups, sortConfig, columns, exportFilename])
++  }, [data, debouncedSearchTerm, searchFields, debouncedFilterGroups, sortConfig, columns, exportFilename])
+   const renderSortIcon = useCallback((field: string) => {
+     if (sortConfig.field !== field) {
+@@ -162,15 +152,9 @@ export function DataTable<T = any>({
+   const clearAllFilters = useCallback(() => {
+     startTransition(() => {
+       setSearchTerm("")
+-      const clearedQuickFilters: Record<string, string> = {}
+-      quickFilters.forEach((filter) => {
+-        clearedQuickFilters[filter.field] = ""
+-      })
+-      setQuickFilterValues(clearedQuickFilters)
+       setFilterGroups([])
+-      setPendingFilterGroups([])
+     })
+-  }, [quickFilters, startTransition])
++  }, [startTransition])
+   // Wrapped state setters for non-urgent updates
+   const handleSearchChange = useCallback((value: string) => {
+@@ -180,20 +164,12 @@ export function DataTable<T = any>({
+   }, [startTransition])
+   const handleFiltersChange = useCallback((filters: FilterGroup[]) => {
+-    setPendingFilterGroups(filters)
+-  }, [])
+-
+-  const handleApplyFilters = useCallback(() => {
+     startTransition(() => {
+-      setFilterGroups(pendingFilterGroups)
++      setFilterGroups(filters)
+     })
+-  }, [pendingFilterGroups, startTransition])
+-
+-  const hasPendingFilterChanges = useMemo(() => {
+-    return JSON.stringify(filterGroups) !== JSON.stringify(pendingFilterGroups)
+-  }, [filterGroups, pendingFilterGroups])
++  }, [startTransition])
+-  const hasActiveFilters = debouncedSearchTerm || Object.values(debouncedQuickFilterValues).some(Boolean) || debouncedFilterGroups.length > 0
++  const hasActiveFilters = debouncedSearchTerm || debouncedFilterGroups.length > 0
+   // Selection helper functions
+   const handleRowSelection = useCallback((rowIndex: number) => {
+@@ -224,6 +200,34 @@ export function DataTable<T = any>({
+     setSelectAll(false)
+   }, [])
++  // Column visibility handlers
++  const handleColumnVisibilityChange = useCallback((columnKey: string, visible: boolean) => {
++    setColumnVisibility(prev => ({
++      ...prev,
++      [columnKey]: visible
++    }))
++  }, [])
++
++  const handleShowAllColumns = useCallback(() => {
++    setColumnVisibility(prev => {
++      const newVisibility = { ...prev }
++      columns.forEach(column => {
++        newVisibility[column.key] = true
++      })
++      return newVisibility
++    })
++  }, [columns])
++
++  const handleHideAllColumns = useCallback(() => {
++    setColumnVisibility(prev => {
++      const newVisibility = { ...prev }
++      columns.forEach(column => {
++        newVisibility[column.key] = false
++      })
++      return newVisibility
++    })
++  }, [columns])
++
+   // Get selected row data
+   const selectedRowData = processedData.data.filter((_, index) => selectedRows.has(index))
+@@ -248,24 +252,35 @@ export function DataTable<T = any>({
+           </CardTitle>
+         </CardHeader>
+         <CardContent className="space-y-6">
+-          {/* Search and Quick Filters */}
+-          <DataTableSearch
+-            searchTerm={searchTerm}
+-            searchPlaceholder={searchPlaceholder}
+-            quickFilters={quickFilters}
+-            quickFilterValues={quickFilterValues}
+-            onSearchChange={handleSearchChange}
+-            onQuickFilterChange={handleQuickFilterChange}
+-          />
+-
+-          {/* Advanced Filters */}
+-          <AdvancedFilters
+-            columns={columns}
+-            filterGroups={pendingFilterGroups}
+-            onFiltersChange={handleFiltersChange}
+-            onApplyFilters={handleApplyFilters}
+-            hasPendingChanges={hasPendingFilterChanges}
+-          />
++          {/* Row 2: Controls Layout */}
++          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
++            {/* Left side: Advanced Filters, Column Visibility, Search */}
++            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-1">
++              <AdvancedFilters columns={columns} filterGroups={filterGroups} onFiltersChange={handleFiltersChange} />
++              <ColumnVisibilityToggle
++                columns={columns.map(col => ({ ...col, visible: columnVisibility[col.key] !== false }))}
++                onColumnVisibilityChange={handleColumnVisibilityChange}
++                onShowAll={handleShowAllColumns}
++                onHideAll={handleHideAllColumns}
++              />
++              <div className="flex-1 min-w-[200px]">
++                <DataTableSearch
++                  searchTerm={searchTerm}
++                  searchPlaceholder={searchPlaceholder}
++                  onSearchChange={handleSearchChange}
++                />
++              </div>
++            </div>
++
++            {/* Right side: Create Report CTA */}
++            {onCreateNew && (
++              <div className="flex-shrink-0">
++                <Button onClick={onCreateNew} className="flex items-center gap-2">
++                  {createButtonLabel}
++                </Button>
++              </div>
++            )}
++          </div>
+           {/* Filter Summary */}
+           {hasActiveFilters && (
+@@ -287,10 +302,10 @@ export function DataTable<T = any>({
+           )}
+           {/* Data Table */}
+-          <div className="border rounded-lg">
++          <div className="border rounded-lg overflow-hidden">
+             <Table>
+-              <TableHeader>
+-                <TableRow>
++              <TableHeader className="bg-muted/50">
++                <TableRow className="hover:bg-muted/50">
+                   {enableSelection && (
+                     <TableHead className="w-12">
+                       <Checkbox
+@@ -300,7 +315,7 @@ export function DataTable<T = any>({
+                       />
+                     </TableHead>
+                   )}
+-                  {columns.map((column) => (
++                  {visibleColumns.map((column) => (
+                     <TableHead key={column.key}>
+                       {column.sortable ? (
+                         <Button
+@@ -323,51 +338,49 @@ export function DataTable<T = any>({
+                   )}
+                 </TableRow>
+               </TableHeader>
+-              {loading && isPending ? (
+-                <TableSkeleton
+-                  columns={columns}
+-                  enableSelection={enableSelection}
+-                  actions={actions}
+-                  rows={pageSize}
+-                />
+-              ) : (
+-                <TableBody>
+-                  {processedData.data.length === 0 ? (
+-                    <TableRow>
+-                      <TableCell colSpan={columns.length + (enableSelection ? 1
+ : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8 text-muted-foreground">
+-                        {data.length === 0 ? emptyMessage : noResultsMessage}
+-                      </TableCell>
+-                    </TableRow>
+-                  ) : (
+-                    processedData.data.map((item, index) => (
+-                      <TableRow key={index}>
+-                        {enableSelection && (
+-                          <TableCell>
+-                            <Checkbox
+-                              checked={selectedRows.has(index)}
+-                              onCheckedChange={() => handleRowSelection(index)}
+-                              aria-label={`Select row ${index + 1}`}
+-                            />
+-                          </TableCell>
+-                        )}
+-                        {columns.map((column) => {
+-                          const value = getNestedValue(item, column.key)
+-                          return (
+-                            <TableCell key={column.key}>
+-                              {renderCell ? renderCell(value, column, item) : formatCellValue(value, column)}
+-                            </TableCell>
+-                          )
+-                        })}
+-                        {actions.length > 0 && (
+-                          <TableCell>
+-                            <ActionsColumn row={item} actions={actions} />
++              <TableBody>
++                {loading ? (
++                  <TableRow>
++                    <TableCell colSpan={visibleColumns.length + (enableSelection ? 1 : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8">
++                      <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
++                      {loading ? loadingMessage : "Processing data..."}
++                    </TableCell>
++                  </TableRow>
++                ) : processedData.data.length === 0 ? (
++                  <TableRow>
++                    <TableCell colSpan={visibleColumns.length + (enableSelectio
+n ? 1 : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8 text-muted-foreground">
++                      {data.length === 0 ? emptyMessage : noResultsMessage}
++                    </TableCell>
++                  </TableRow>
++                ) : (
++                  processedData.data.map((item, index) => (
++                    <TableRow key={index}>
++                      {enableSelection && (
++                        <TableCell>
++                          <Checkbox
++                            checked={selectedRows.has(index)}
++                            onCheckedChange={() => handleRowSelection(index)}
++                            aria-label={`Select row ${index + 1}`}
++                          />
++                        </TableCell>
++                      )}
++                      {visibleColumns.map((column) => {
++                        const value = getNestedValue(item, column.key)
++                        return (
++                          <TableCell key={column.key}>
++                            {renderCell ? renderCell(value, column, item) : formatCellValue(value, column)}
+                           </TableCell>
+-                        )}
+-                      </TableRow>
+-                    ))
+-                  )}
+-                </TableBody>
+-              )}
++                        )
++                      })}
++                      {actions.length > 0 && (
++                        <TableCell>
++                          <ActionsColumn row={item} actions={actions} />
++                        </TableCell>
++                      )}
++                    </TableRow>
++                  ))
++                )}
++              </TableBody>
+             </Table>
+           </div>
+diff --git a/components/data-table/reports-table.tsx b/components/data-table/reports-table.tsx
+index dc7bc2b..977f99c 100644
+--- a/components/data-table/reports-table.tsx
++++ b/components/data-table/reports-table.tsx
+@@ -3,7 +3,6 @@
+ import { useMemo, useCallback } from "react"
+ import { Badge } from "@/components/ui/badge"
+ import { DataTable} from "./data-table"
+-import { type QuickFilterConfig } from "./data-table-search"
+ import { useAllReports, type Report } from "@/lib/graphql-client"
+ import type { ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
+ import { format } from "date-fns"
+@@ -20,29 +19,11 @@ export function ReportsTable() {
+   // Use React Query hook for data fetching
+   const { data: allReports = [], isLoading: loading, error } = useAllReports()
+-  // Extract status options for use in both quickFilters and columns
++  // Extract status options for use in columns
+   const statusOptions = useMemo(() => {
+     return extractUniqueOptions(allReports, (r) => r.status)
+   }, [allReports])
+-  // Generate quick filter options from data
+-  const quickFilters: QuickFilterConfig[] = useMemo(() => {
+-    const teamOptions = extractUniqueOptions(allReports, (r) => r.team?.name)
+-    const neighbourhoodOptions = extractUniqueOptions(allReports, (r) => r.neighbourhood?.name)
+-
+-    const createFilterConfig = (field: string, label: string, options: string[]): QuickFilterConfig => ({
+-      field,
+-      label,
+-      placeholder: `Filter by ${label.toLowerCase().slice(0, -1)}`,
+-      options: options.map((option) => ({ label: option, value: option })),
+-    })
+-
+-    return [
+-      createFilterConfig("status", "Statuses", statusOptions),
+-      createFilterConfig("team.name", "Teams", teamOptions),
+-      createFilterConfig("neighbourhood.name", "Neighbourhoods", neighbourhoodOptions),
+-    ]
+-  }, [allReports, statusOptions])
+   const REPORTS_COLUMNS: ColumnConfig[] = useMemo(() => [
+     { key: "id", label: "ID", variant: "text", sortable: true, exportable: true },
+@@ -193,12 +174,18 @@ export function ReportsTable() {
+     return renderer ? renderer() : renderDefaultCell(value)
+   }, [renderIdCell, renderTitleCell, renderDescriptionCell, renderStatusCell, renderDateCell, renderDefaultCell])
++  // Handle create new report
++  const handleCreateReport = useCallback(() => {
++    console.log("Create new report clicked")
++    // Add your create report logic here
++    // For example: router.push('/reports/new')
++  }, [])
++
+   return (
+       <DataTable<Report>
+           data={allReports}
+           columns={REPORTS_COLUMNS}
+           searchFields={REPORTS_SEARCH_FIELDS}
+-          quickFilters={quickFilters}
+           title="Reports Data Table"
+           loadingMessage="Loading reports..."
+           emptyMessage="No reports available"
+@@ -211,6 +198,8 @@ export function ReportsTable() {
+           actions={actions}
+           bulkActions={bulkActions}
+           enableSelection={true}
++          onCreateNew={handleCreateReport}
++          createButtonLabel="Create Report"
+       />
+   )
+ }
+\ No newline at end of file
+diff --git a/lib/client-filters.ts b/lib/client-filters.ts
+index f414e6a..7caac3a 100644
+--- a/lib/client-filters.ts
++++ b/lib/client-filters.ts
+@@ -162,16 +162,6 @@ export function applySearch<T>(data: T[], searchTerm: string, searchFields: stri
+   })
+ }
+-export function applyQuickFilters(data: any[], quickFilters: Record<string, string>): any[] {
+-  return data.filter((item) => {
+-    return Object.entries(quickFilters).every(([field, value]) => {
+-      if (!value || value === "all") return true
+-
+-      const itemValue = getNestedValue(item, field)
+-      return itemValue === value
+-    })
+-  })
+-}
+ export function applySorting(data: any[], sortConfig: SortConfig): any[] {
+   if (!sortConfig.field) return data
+diff --git a/lib/types.ts b/lib/types.ts
+index 50f3f83..597daa2 100644
+--- a/lib/types.ts
++++ b/lib/types.ts
+@@ -25,6 +25,7 @@ export interface ColumnConfig {
+   variant: FilterVariant
+   sortable?: boolean
+   exportable?: boolean
++  visible?: boolean
+   options?: { label: string; value: string }[]
+ }

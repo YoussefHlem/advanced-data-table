@@ -162,16 +162,6 @@ export function applySearch<T>(data: T[], searchTerm: string, searchFields: stri
   })
 }
 
-export function applyQuickFilters(data: any[], quickFilters: Record<string, string>): any[] {
-  return data.filter((item) => {
-    return Object.entries(quickFilters).every(([field, value]) => {
-      if (!value || value === "all") return true
-
-      const itemValue = getNestedValue(item, field)
-      return itemValue === value
-    })
-  })
-}
 
 export function applySorting(data: any[], sortConfig: SortConfig): any[] {
   if (!sortConfig.field) return data

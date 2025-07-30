@@ -12,23 +12,22 @@ import {
 } from "lucide-react"
 import { AdvancedFilters } from "./advanced-filters"
 import { DataTableHeader } from "./data-table-header"
-import { DataTableSearch, type QuickFilterConfig } from "./data-table-search"
+import { DataTableSearch } from "./data-table-search"
 import { DataTablePagination } from "./data-table-pagination"
-import { applyFilters, applySearch, applyQuickFilters, applySorting, applyPagination } from "@/lib/client-filters"
+import { ColumnVisibilityToggle } from "./column-visibility-toggle"
+import { applyFilters, applySearch, applySorting, applyPagination } from "@/lib/client-filters"
 import { getNestedValue, formatCellValue, exportDataToCSV, DEFAULT_PAGE_SIZE } from "@/lib/data-table-utils"
 import type { FilterGroup, SortConfig, ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
 import { FloatingActionBar } from "./floating-action-bar"
 import { ActionsColumn } from "./actions-column"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useDebounce } from "@/lib/use-debounce"
-import { TableSkeleton } from "./table-skeleton"
 
 
 export interface DataTableProps<T = any> {
   data: T[]
   columns: ColumnConfig[]
   searchFields: string[]
-  quickFilters?: QuickFilterConfig[]
   title?: string
   loadingMessage?: string
   emptyMessage?: string
@@ -41,13 +40,14 @@ export interface DataTableProps<T = any> {
   actions?: ActionItem[]
   bulkActions?: BulkActionItem[]
   enableSelection?: boolean
+  onCreateNew?: () => void
+  createButtonLabel?: string
 }
 
 export function DataTable<T = any>({
   data,
   columns,
   searchFields,
-  quickFilters = [],
   title = "Data Table",
   loadingMessage = "Loading data...",
   emptyMessage = "No data available",
@@ -60,16 +60,24 @@ export function DataTable<T = any>({
   actions = [],
   bulkActions = [],
   enableSelection = false,
+  onCreateNew,
+  createButtonLabel = "Create New",
 }: DataTableProps<T>) {
   // Filter and search state
   const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([])
-  const [pendingFilterGroups, setPendingFilterGroups] = useState<FilterGroup[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [quickFilterValues, setQuickFilterValues] = useState<Record<string, string>>({})
+
+  // Column visibility state
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
+    // Initialize all columns as visible by default
+    return columns.reduce((acc, column) => {
+      acc[column.key] = column.visible !== false
+      return acc
+    }, {} as Record<string, boolean>)
+  })
 
   // Debounced values for performance optimization
   const debouncedSearchTerm = useDebounce(searchTerm, 300) // 300ms delay for search
-  const debouncedQuickFilterValues = useDebounce(quickFilterValues, 500) // 500ms delay for filters
   const debouncedFilterGroups = useDebounce(filterGroups, 500) // 500ms delay for advanced filters
 
   // Sorting and pagination state
@@ -84,19 +92,14 @@ export function DataTable<T = any>({
   // Transition state for non-urgent updates
   const [isPending, startTransition] = useTransition()
 
-  // Initialize quick filter values
-  useEffect(() => {
-    const initialValues: Record<string, string> = {}
-    quickFilters.forEach((filter) => {
-      initialValues[filter.field] = ""
-    })
-    setQuickFilterValues(initialValues)
-  }, [quickFilters])
+  // Compute visible columns
+  const visibleColumns = useMemo(() => {
+    return columns.map(column => ({
+      ...column,
+      visible: columnVisibility[column.key] !== false
+    })).filter(column => column.visible)
+  }, [columns, columnVisibility])
 
-  // Initialize pending filters to match applied filters
-  useEffect(() => {
-    setPendingFilterGroups(filterGroups)
-  }, [filterGroups])
 
   // Apply all client-side processing
   const processedData = useMemo(() => {
@@ -104,9 +107,6 @@ export function DataTable<T = any>({
 
     // Apply search (using debounced value)
     filteredData = applySearch(filteredData, debouncedSearchTerm, searchFields)
-
-    // Apply quick filters (using debounced value)
-    filteredData = applyQuickFilters(filteredData, debouncedQuickFilterValues)
 
     // Apply advanced filters (using debounced value)
     filteredData = applyFilters(filteredData, debouncedFilterGroups)
@@ -116,12 +116,12 @@ export function DataTable<T = any>({
 
     // Apply pagination
     return applyPagination(filteredData, currentPage, pageSize)
-  }, [data, debouncedSearchTerm, debouncedQuickFilterValues, debouncedFilterGroups, sortConfig, currentPage, pageSize, searchFields])
+  }, [data, debouncedSearchTerm, debouncedFilterGroups, sortConfig, currentPage, pageSize, searchFields])
 
   // Reset to first page when filters change (using debounced values)
   useEffect(() => {
     setCurrentPage(1)
-  }, [debouncedSearchTerm, debouncedQuickFilterValues, debouncedFilterGroups])
+  }, [debouncedSearchTerm, debouncedFilterGroups])
 
   const handleSort = useCallback((field: string) => {
     startTransition(() => {
@@ -132,25 +132,15 @@ export function DataTable<T = any>({
     })
   }, [startTransition])
 
-  const handleQuickFilterChange = useCallback((field: string, value: string) => {
-    startTransition(() => {
-      setQuickFilterValues((prev) => ({
-        ...prev,
-        [field]: value === "all" ? "" : value,
-      }))
-    })
-  }, [startTransition])
 
   const handleExportToCSV = useCallback(() => {
     // Export all filtered data (not just current page) using debounced values
     let exportData = data
     exportData = applySearch(exportData, debouncedSearchTerm, searchFields)
-    exportData = applyQuickFilters(exportData, debouncedQuickFilterValues)
     exportData = applyFilters(exportData, debouncedFilterGroups)
     exportData = applySorting(exportData, sortConfig)
-
     exportDataToCSV(exportData, columns, exportFilename)
-  }, [data, debouncedSearchTerm, searchFields, debouncedQuickFilterValues, debouncedFilterGroups, sortConfig, columns, exportFilename])
+  }, [data, debouncedSearchTerm, searchFields, debouncedFilterGroups, sortConfig, columns, exportFilename])
 
   const renderSortIcon = useCallback((field: string) => {
     if (sortConfig.field !== field) {
@@ -162,15 +152,9 @@ export function DataTable<T = any>({
   const clearAllFilters = useCallback(() => {
     startTransition(() => {
       setSearchTerm("")
-      const clearedQuickFilters: Record<string, string> = {}
-      quickFilters.forEach((filter) => {
-        clearedQuickFilters[filter.field] = ""
-      })
-      setQuickFilterValues(clearedQuickFilters)
       setFilterGroups([])
-      setPendingFilterGroups([])
     })
-  }, [quickFilters, startTransition])
+  }, [startTransition])
 
   // Wrapped state setters for non-urgent updates
   const handleSearchChange = useCallback((value: string) => {
@@ -180,20 +164,12 @@ export function DataTable<T = any>({
   }, [startTransition])
 
   const handleFiltersChange = useCallback((filters: FilterGroup[]) => {
-    setPendingFilterGroups(filters)
-  }, [])
-
-  const handleApplyFilters = useCallback(() => {
     startTransition(() => {
-      setFilterGroups(pendingFilterGroups)
+      setFilterGroups(filters)
     })
-  }, [pendingFilterGroups, startTransition])
+  }, [startTransition])
 
-  const hasPendingFilterChanges = useMemo(() => {
-    return JSON.stringify(filterGroups) !== JSON.stringify(pendingFilterGroups)
-  }, [filterGroups, pendingFilterGroups])
-
-  const hasActiveFilters = debouncedSearchTerm || Object.values(debouncedQuickFilterValues).some(Boolean) || debouncedFilterGroups.length > 0
+  const hasActiveFilters = debouncedSearchTerm || debouncedFilterGroups.length > 0
 
   // Selection helper functions
   const handleRowSelection = useCallback((rowIndex: number) => {
@@ -224,6 +200,34 @@ export function DataTable<T = any>({
     setSelectAll(false)
   }, [])
 
+  // Column visibility handlers
+  const handleColumnVisibilityChange = useCallback((columnKey: string, visible: boolean) => {
+    setColumnVisibility(prev => ({
+      ...prev,
+      [columnKey]: visible
+    }))
+  }, [])
+
+  const handleShowAllColumns = useCallback(() => {
+    setColumnVisibility(prev => {
+      const newVisibility = { ...prev }
+      columns.forEach(column => {
+        newVisibility[column.key] = true
+      })
+      return newVisibility
+    })
+  }, [columns])
+
+  const handleHideAllColumns = useCallback(() => {
+    setColumnVisibility(prev => {
+      const newVisibility = { ...prev }
+      columns.forEach(column => {
+        newVisibility[column.key] = false
+      })
+      return newVisibility
+    })
+  }, [columns])
+
   // Get selected row data
   const selectedRowData = processedData.data.filter((_, index) => selectedRows.has(index))
 
@@ -248,24 +252,35 @@ export function DataTable<T = any>({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Search and Quick Filters */}
-          <DataTableSearch
-            searchTerm={searchTerm}
-            searchPlaceholder={searchPlaceholder}
-            quickFilters={quickFilters}
-            quickFilterValues={quickFilterValues}
-            onSearchChange={handleSearchChange}
-            onQuickFilterChange={handleQuickFilterChange}
-          />
-
-          {/* Advanced Filters */}
-          <AdvancedFilters
-            columns={columns}
-            filterGroups={pendingFilterGroups}
-            onFiltersChange={handleFiltersChange}
-            onApplyFilters={handleApplyFilters}
-            hasPendingChanges={hasPendingFilterChanges}
-          />
+          {/* Row 2: Controls Layout */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+            {/* Left side: Advanced Filters, Column Visibility, Search */}
+            <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center flex-1">
+              <AdvancedFilters columns={columns} filterGroups={filterGroups} onFiltersChange={handleFiltersChange} />
+              <ColumnVisibilityToggle
+                columns={columns.map(col => ({ ...col, visible: columnVisibility[col.key] !== false }))}
+                onColumnVisibilityChange={handleColumnVisibilityChange}
+                onShowAll={handleShowAllColumns}
+                onHideAll={handleHideAllColumns}
+              />
+              <div className="flex-1 min-w-[200px]">
+                <DataTableSearch
+                  searchTerm={searchTerm}
+                  searchPlaceholder={searchPlaceholder}
+                  onSearchChange={handleSearchChange}
+                />
+              </div>
+            </div>
+            
+            {/* Right side: Create Report CTA */}
+            {onCreateNew && (
+              <div className="flex-shrink-0">
+                <Button onClick={onCreateNew} className="flex items-center gap-2">
+                  {createButtonLabel}
+                </Button>
+              </div>
+            )}
+          </div>
 
           {/* Filter Summary */}
           {hasActiveFilters && (
@@ -287,10 +302,10 @@ export function DataTable<T = any>({
           )}
 
           {/* Data Table */}
-          <div className="border rounded-lg">
+          <div className="border rounded-lg overflow-hidden">
             <Table>
-              <TableHeader>
-                <TableRow>
+              <TableHeader className="bg-muted/50">
+                <TableRow className="hover:bg-muted/50">
                   {enableSelection && (
                     <TableHead className="w-12">
                       <Checkbox
@@ -300,7 +315,7 @@ export function DataTable<T = any>({
                       />
                     </TableHead>
                   )}
-                  {columns.map((column) => (
+                  {visibleColumns.map((column) => (
                     <TableHead key={column.key}>
                       {column.sortable ? (
                         <Button
@@ -323,51 +338,49 @@ export function DataTable<T = any>({
                   )}
                 </TableRow>
               </TableHeader>
-              {loading && isPending ? (
-                <TableSkeleton
-                  columns={columns}
-                  enableSelection={enableSelection}
-                  actions={actions}
-                  rows={pageSize}
-                />
-              ) : (
-                <TableBody>
-                  {processedData.data.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={columns.length + (enableSelection ? 1 : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8 text-muted-foreground">
-                        {data.length === 0 ? emptyMessage : noResultsMessage}
-                      </TableCell>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={visibleColumns.length + (enableSelection ? 1 : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2" />
+                      {loading ? loadingMessage : "Processing data..."}
+                    </TableCell>
+                  </TableRow>
+                ) : processedData.data.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={visibleColumns.length + (enableSelection ? 1 : 0) + (actions.length > 0 ? 1 : 0)} className="text-center py-8 text-muted-foreground">
+                      {data.length === 0 ? emptyMessage : noResultsMessage}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  processedData.data.map((item, index) => (
+                    <TableRow key={index}>
+                      {enableSelection && (
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedRows.has(index)}
+                            onCheckedChange={() => handleRowSelection(index)}
+                            aria-label={`Select row ${index + 1}`}
+                          />
+                        </TableCell>
+                      )}
+                      {visibleColumns.map((column) => {
+                        const value = getNestedValue(item, column.key)
+                        return (
+                          <TableCell key={column.key}>
+                            {renderCell ? renderCell(value, column, item) : formatCellValue(value, column)}
+                          </TableCell>
+                        )
+                      })}
+                      {actions.length > 0 && (
+                        <TableCell>
+                          <ActionsColumn row={item} actions={actions} />
+                        </TableCell>
+                      )}
                     </TableRow>
-                  ) : (
-                    processedData.data.map((item, index) => (
-                      <TableRow key={index}>
-                        {enableSelection && (
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedRows.has(index)}
-                              onCheckedChange={() => handleRowSelection(index)}
-                              aria-label={`Select row ${index + 1}`}
-                            />
-                          </TableCell>
-                        )}
-                        {columns.map((column) => {
-                          const value = getNestedValue(item, column.key)
-                          return (
-                            <TableCell key={column.key}>
-                              {renderCell ? renderCell(value, column, item) : formatCellValue(value, column)}
-                            </TableCell>
-                          )
-                        })}
-                        {actions.length > 0 && (
-                          <TableCell>
-                            <ActionsColumn row={item} actions={actions} />
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              )}
+                  ))
+                )}
+              </TableBody>
             </Table>
           </div>
 

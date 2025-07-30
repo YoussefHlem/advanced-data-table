@@ -3,7 +3,6 @@ import {
   evaluateCondition,
   applyFilters,
   applySearch,
-  applyQuickFilters,
   applySorting,
   applyPagination,
   getNestedValue,
@@ -172,33 +171,6 @@ describe("Client-Side Filtering", () => {
     })
   })
 
-  describe("applyQuickFilters", () => {
-    it("should filter by single quick filter", () => {
-      const quickFilters = { status: "pending" }
-      const result = applyQuickFilters(sampleData, quickFilters)
-      expect(result).toHaveLength(1)
-      expect(result[0].status).toBe("pending")
-    })
-
-    it("should filter by multiple quick filters", () => {
-      const quickFilters = { status: "pending", "neighbourhood.name": "Downtown" }
-      const result = applyQuickFilters(sampleData, quickFilters)
-      expect(result).toHaveLength(1)
-      expect(result[0].id).toBe("1")
-    })
-
-    it("should ignore empty filter values", () => {
-      const quickFilters = { status: "", "neighbourhood.name": "Downtown" }
-      const result = applyQuickFilters(sampleData, quickFilters)
-      expect(result).toHaveLength(2)
-    })
-
-    it("should ignore 'all' filter values", () => {
-      const quickFilters = { status: "all", "neighbourhood.name": "Downtown" }
-      const result = applyQuickFilters(sampleData, quickFilters)
-      expect(result).toHaveLength(2)
-    })
-  })
 
   describe("applySorting", () => {
     it("should sort by string field ascending", () => {
@@ -323,15 +295,11 @@ describe("Integration Tests", () => {
   ]
 
   it("should apply all filters in correct order", () => {
-    // Search -> Quick Filters -> Advanced Filters -> Sort -> Paginate
+    // Search -> Advanced Filters -> Sort -> Paginate
     let result = sampleData
 
     // Apply search
     result = applySearch(result, "repair", ["title", "description"])
-    expect(result).toHaveLength(1)
-
-    // Apply quick filters (should not affect since search already filtered)
-    result = applyQuickFilters(result, { status: "in_progress" })
     expect(result).toHaveLength(1)
 
     // Apply advanced filters

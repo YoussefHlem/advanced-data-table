@@ -3,7 +3,6 @@
 import { useMemo, useCallback } from "react"
 import { Badge } from "@/components/ui/badge"
 import { DataTable} from "./data-table"
-import { type QuickFilterConfig } from "./data-table-search"
 import { useAllReports, type Report } from "@/lib/graphql-client"
 import type { ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
 import { format } from "date-fns"
@@ -20,29 +19,11 @@ export function ReportsTable() {
   // Use React Query hook for data fetching
   const { data: allReports = [], isLoading: loading, error } = useAllReports()
 
-  // Extract status options for use in both quickFilters and columns
+  // Extract status options for use in columns
   const statusOptions = useMemo(() => {
     return extractUniqueOptions(allReports, (r) => r.status)
   }, [allReports])
 
-  // Generate quick filter options from data
-  const quickFilters: QuickFilterConfig[] = useMemo(() => {
-    const teamOptions = extractUniqueOptions(allReports, (r) => r.team?.name)
-    const neighbourhoodOptions = extractUniqueOptions(allReports, (r) => r.neighbourhood?.name)
-
-    const createFilterConfig = (field: string, label: string, options: string[]): QuickFilterConfig => ({
-      field,
-      label,
-      placeholder: `Filter by ${label.toLowerCase().slice(0, -1)}`,
-      options: options.map((option) => ({ label: option, value: option })),
-    })
-
-    return [
-      createFilterConfig("status", "Statuses", statusOptions),
-      createFilterConfig("team.name", "Teams", teamOptions),
-      createFilterConfig("neighbourhood.name", "Neighbourhoods", neighbourhoodOptions),
-    ]
-  }, [allReports, statusOptions])
 
   const REPORTS_COLUMNS: ColumnConfig[] = useMemo(() => [
     { key: "id", label: "ID", variant: "text", sortable: true, exportable: true },
@@ -193,12 +174,18 @@ export function ReportsTable() {
     return renderer ? renderer() : renderDefaultCell(value)
   }, [renderIdCell, renderTitleCell, renderDescriptionCell, renderStatusCell, renderDateCell, renderDefaultCell])
 
+  // Handle create new report
+  const handleCreateReport = useCallback(() => {
+    console.log("Create new report clicked")
+    // Add your create report logic here
+    // For example: router.push('/reports/new')
+  }, [])
+
   return (
       <DataTable<Report>
           data={allReports}
           columns={REPORTS_COLUMNS}
           searchFields={REPORTS_SEARCH_FIELDS}
-          quickFilters={quickFilters}
           title="Reports Data Table"
           loadingMessage="Loading reports..."
           emptyMessage="No reports available"
@@ -211,6 +198,8 @@ export function ReportsTable() {
           actions={actions}
           bulkActions={bulkActions}
           enableSelection={true}
+          onCreateNew={handleCreateReport}
+          createButtonLabel="Create Report"
       />
   )
 }
