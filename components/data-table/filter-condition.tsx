@@ -99,26 +99,71 @@ export function FilterConditionComponent({ condition, columns, onUpdate, onRemov
     return renderNumberInput()
   }
 
-  const renderDateInput = () => (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className={cn("justify-start text-left font-normal", !condition.value && "text-muted-foreground")}
-        >
-          <CalendarIcon className="mr-2 h-4 w-4" />
-          {condition.value ? format(new Date(condition.value), "PPP") : "Pick a date"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-0">
-        <Calendar
-          mode="single"
-          selected={condition.value ? new Date(condition.value) : undefined}
-          onSelect={(date) => onUpdate({ ...condition, value: date?.toISOString() })}
-        />
-      </PopoverContent>
-    </Popover>
-  )
+  const renderDateInput = () => {
+    // Handle date range for "isBetween" operator
+    if (condition.operator === "isBetween") {
+      const startDate = condition.value?.start ? new Date(condition.value.start) : undefined
+      const endDate = condition.value?.end ? new Date(condition.value.end) : undefined
+      
+      return (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className={cn("justify-start text-left font-normal", !startDate && !endDate && "text-muted-foreground")}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {startDate && endDate 
+                ? `${format(startDate, "PPP")} - ${format(endDate, "PPP")}`
+                : startDate 
+                ? `${format(startDate, "PPP")} - End date`
+                : endDate
+                ? `Start date - ${format(endDate, "PPP")}`
+                : "Pick date range"
+              }
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar
+              mode="range"
+              selected={{ from: startDate, to: endDate }}
+              onSelect={(range) => {
+                onUpdate({
+                  ...condition,
+                  value: {
+                    start: range?.from?.toISOString(),
+                    end: range?.to?.toISOString(),
+                  },
+                })
+              }}
+            />
+          </PopoverContent>
+        </Popover>
+      )
+    }
+
+    // Handle single date selection for other operators
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn("justify-start text-left font-normal", !condition.value && "text-muted-foreground")}
+          >
+            <CalendarIcon className="mr-2 h-4 w-4" />
+            {condition.value ? format(new Date(condition.value), "PPP") : "Pick a date"}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0">
+          <Calendar
+            mode="single"
+            selected={condition.value ? new Date(condition.value) : undefined}
+            onSelect={(date) => onUpdate({ ...condition, value: date?.toISOString() })}
+          />
+        </PopoverContent>
+      </Popover>
+    )
+  }
 
   const renderDateRangeInput = () => {
     if (condition.operator === "isBetween") {

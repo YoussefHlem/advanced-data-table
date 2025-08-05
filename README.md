@@ -428,7 +428,6 @@ npm run test:ui
 The project includes comprehensive tests for:
 
 - **Client Filters** (`client-filters.test.ts`) - Data processing utilities
-- **Debounce** (`debounce.test.ts`) - Debounce functionality
 - **Filter Utils** (`filter-utils.test.ts`) - Filter utilities
 - **GraphQL Client** (`graphql-client.test.ts`) - Data fetching
 - **Integration** (`integration.test.ts`) - End-to-end scenarios
@@ -514,7 +513,6 @@ lib/
 └── utils.ts              # General utilities
 __tests__/                # Test files
 ├── client-filters.test.ts
-├── debounce.test.ts
 ├── filter-utils.test.ts
 ├── graphql-client.test.ts
 └── integration.test.ts
