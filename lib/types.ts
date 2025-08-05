@@ -14,9 +14,19 @@ export interface FilterGroup {
   joinOperator: JoinOperator
 }
 
+export interface SortColumn {
+  field: string
+  order: "asc" | "desc"
+  priority: number
+}
+
 export interface SortConfig {
   field: string
   order: "asc" | "desc"
+}
+
+export interface MultiSortConfig {
+  columns: SortColumn[]
 }
 
 export interface ColumnConfig {

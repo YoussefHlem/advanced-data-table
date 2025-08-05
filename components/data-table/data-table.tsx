@@ -15,9 +15,9 @@ import { DataTableHeader } from "./data-table-header"
 import { DataTableSearch } from "./data-table-search"
 import { DataTablePagination } from "./data-table-pagination"
 import { ColumnVisibilityToggle } from "./column-visibility-toggle"
-import { applyFilters, applySearch, applySorting, applyPagination } from "@/lib/client-filters"
+import { applyFilters, applySearch, applySorting, applyMultiSorting, applyPagination } from "@/lib/client-filters"
 import { getNestedValue, formatCellValue, exportDataToCSV, DEFAULT_PAGE_SIZE } from "@/lib/data-table-utils"
-import type { FilterGroup, SortConfig, ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
+import type { FilterGroup, SortConfig, MultiSortConfig, ColumnConfig, ActionItem, BulkActionItem } from "@/lib/types"
 import { FloatingActionBar } from "./floating-action-bar"
 import { ActionsColumn } from "./actions-column"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -82,6 +82,7 @@ export function DataTable<T = any>({
 
   // Sorting and pagination state
   const [sortConfig, setSortConfig] = useState<SortConfig>({ field: "", order: "desc" })
+  const [multiSortConfig, setMultiSortConfig] = useState<MultiSortConfig>({ columns: [] })
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
 
@@ -90,13 +91,13 @@ export function DataTable<T = any>({
   const [selectAll, setSelectAll] = useState(false)
 
   // Transition state for non-urgent updates
-  const [isPending, startTransition] = useTransition()
+  const [_, startTransition] = useTransition()
 
   // Compute visible columns
   const visibleColumns = useMemo(() => {
     return columns.map(column => ({
       ...column,
-      visible: columnVisibility[column.key] !== false
+      visible: columnVisibility[column.key]
     })).filter(column => column.visible)
   }, [columns, columnVisibility])
 
@@ -111,24 +112,62 @@ export function DataTable<T = any>({
     // Apply advanced filters (using debounced value)
     filteredData = applyFilters(filteredData, debouncedFilterGroups)
 
-    // Apply sorting
-    filteredData = applySorting(filteredData, sortConfig)
+    // Apply sorting (use multi-column sorting if available, otherwise single-column)
+    if (multiSortConfig.columns.length > 0) {
+      filteredData = applyMultiSorting(filteredData, multiSortConfig)
+    } else {
+      filteredData = applySorting(filteredData, sortConfig)
+    }
 
     // Apply pagination
     return applyPagination(filteredData, currentPage, pageSize)
-  }, [data, debouncedSearchTerm, debouncedFilterGroups, sortConfig, currentPage, pageSize, searchFields])
+  }, [data, debouncedSearchTerm, debouncedFilterGroups, sortConfig, multiSortConfig, currentPage, pageSize, searchFields])
 
   // Reset to first page when filters change (using debounced values)
   useEffect(() => {
     setCurrentPage(1)
   }, [debouncedSearchTerm, debouncedFilterGroups])
 
-  const handleSort = useCallback((field: string) => {
+  const handleSort = useCallback((field: string, ctrlKey: boolean = false) => {
     startTransition(() => {
-      setSortConfig((prev) => ({
-        field,
-        order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
-      }))
+      if (ctrlKey) {
+        // Multi-column sorting with Ctrl+click
+        setMultiSortConfig((prev) => {
+          const existingColumnIndex = prev.columns.findIndex(col => col.field === field)
+          
+          if (existingColumnIndex >= 0) {
+            // Column already exists, toggle its order or remove it
+            const existingColumn = prev.columns[existingColumnIndex]
+            if (existingColumn.order === "asc") {
+              // Change to desc
+              const newColumns = [...prev.columns]
+              newColumns[existingColumnIndex] = { ...existingColumn, order: "desc" }
+              return { columns: newColumns }
+            } else {
+              // Remove the column
+              return { columns: prev.columns.filter(col => col.field !== field) }
+            }
+          } else {
+            // Add new column with priority
+            const newPriority = prev.columns.length > 0 ? Math.max(...prev.columns.map(col => col.priority)) + 1 : 1
+            return {
+              columns: [...prev.columns, { field, order: "asc", priority: newPriority }]
+            }
+          }
+        })
+        
+        // Clear single-column sort when using multi-column
+        setSortConfig({ field: "", order: "desc" })
+      } else {
+        // Single-column sorting (normal click)
+        setSortConfig((prev) => ({
+          field,
+          order: prev.field === field && prev.order === "asc" ? "desc" : "asc",
+        }))
+        
+        // Clear multi-column sort when using single-column
+        setMultiSortConfig({ columns: [] })
+      }
     })
   }, [startTransition])
 
@@ -138,16 +177,42 @@ export function DataTable<T = any>({
     let exportData = data
     exportData = applySearch(exportData, debouncedSearchTerm, searchFields)
     exportData = applyFilters(exportData, debouncedFilterGroups)
-    exportData = applySorting(exportData, sortConfig)
+    
+    // Apply sorting (use multi-column sorting if available, otherwise single-column)
+    if (multiSortConfig.columns.length > 0) {
+      exportData = applyMultiSorting(exportData, multiSortConfig)
+    } else {
+      exportData = applySorting(exportData, sortConfig)
+    }
+    
     exportDataToCSV(exportData, columns, exportFilename)
-  }, [data, debouncedSearchTerm, searchFields, debouncedFilterGroups, sortConfig, columns, exportFilename])
+  }, [data, debouncedSearchTerm, searchFields, debouncedFilterGroups, sortConfig, multiSortConfig, columns, exportFilename])
 
   const renderSortIcon = useCallback((field: string) => {
-    if (sortConfig.field !== field) {
-      return <ArrowUpDown className="h-4 w-4" />
+    // Check if this field is in multi-column sort
+    const multiSortColumn = multiSortConfig.columns.find(col => col.field === field)
+    
+    if (multiSortColumn) {
+      // Show multi-column sort icon with priority number
+      const Icon = multiSortColumn.order === "asc" ? ArrowUp : ArrowDown
+      return (
+        <div className="flex items-center gap-1">
+          <Icon className="h-4 w-4" />
+          <span className="text-xs bg-primary text-primary-foreground rounded-full w-4 h-4 flex items-center justify-center">
+            {multiSortColumn.priority}
+          </span>
+        </div>
+      )
     }
-    return sortConfig.order === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
-  }, [sortConfig])
+    
+    // Check single-column sort
+    if (sortConfig.field === field) {
+      return sortConfig.order === "asc" ? <ArrowUp className="h-4 w-4" /> : <ArrowDown className="h-4 w-4" />
+    }
+    
+    // No sorting applied to this field
+    return <ArrowUpDown className="h-4 w-4" />
+  }, [sortConfig, multiSortConfig])
 
   const clearAllFilters = useCallback(() => {
     startTransition(() => {
@@ -320,8 +385,9 @@ export function DataTable<T = any>({
                       {column.sortable ? (
                         <Button
                           variant="ghost"
-                          onClick={() => handleSort(column.key)}
+                          onClick={(e) => handleSort(column.key, e.ctrlKey)}
                           className="h-auto p-0 font-semibold hover:bg-transparent"
+                          title={`Click to sort by ${column.label}. Hold Ctrl and click to add to multi-column sort.`}
                         >
                           {column.label}
                           {renderSortIcon(column.key)}

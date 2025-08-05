@@ -4,10 +4,11 @@ import {
   applyFilters,
   applySearch,
   applySorting,
+  applyMultiSorting,
   applyPagination,
   getNestedValue,
 } from "@/lib/client-filters"
-import type { FilterGroup } from "@/lib/types"
+import type { FilterGroup, MultiSortConfig } from "@/lib/types"
 
 // Mock console.warn to test unsupported operators
 const mockConsoleWarn = vi.fn()
@@ -212,6 +213,165 @@ describe("Client-Side Filtering", () => {
     it("should return original data when no sort field provided", () => {
       const result = applySorting(sampleData, { field: "", order: "asc" })
       expect(result).toEqual(sampleData)
+    })
+  })
+
+  describe("applyMultiSorting", () => {
+    it("should sort by multiple columns with priority", () => {
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "status", order: "asc", priority: 1 },
+          { field: "title", order: "desc", priority: 2 }
+        ]
+      }
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      
+      // First should be "completed" status (alphabetically first), then "in_progress", then "pending"
+      expect(result[0].status).toBe("completed")
+      expect(result[1].status).toBe("in_progress")
+      expect(result[2].status).toBe("pending")
+    })
+
+    it("should handle single column multi-sort", () => {
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "title", order: "asc", priority: 1 }
+        ]
+      }
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      expect(result[0].title).toBe("Electrical repair")
+      expect(result[2].title).toBe("HVAC maintenance")
+    })
+
+    it("should sort by three columns with different priorities", () => {
+      const extendedData = [
+        ...sampleData,
+        {
+          id: "4",
+          title: "Fix water leak",
+          status: "pending",
+          created_at: "2024-01-10T08:00:00Z",
+          latitude: 40.7000,
+          longitude: -74.0000,
+          neighbourhood: { name: "Downtown" },
+          team: { name: "Plumbing Team" }
+        }
+      ]
+
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "status", order: "asc", priority: 1 },
+          { field: "title", order: "asc", priority: 2 },
+          { field: "created_at", order: "desc", priority: 3 }
+        ]
+      }
+      
+      const result = applyMultiSorting(extendedData, multiSortConfig)
+      
+      // Should be sorted by status first (completed, in_progress, pending), then title, then created_at desc
+      expect(result[0].status).toBe("completed")
+      expect(result[1].status).toBe("in_progress")
+      expect(result[2].status).toBe("pending")
+      expect(result[2].title).toBe("Fix water leak")
+      // Between the two "Fix water leak" entries, newer one should come first (desc order)
+      expect(result[2].created_at).toBe("2024-01-15T10:00:00Z")
+      expect(result[3].created_at).toBe("2024-01-10T08:00:00Z")
+    })
+
+    it("should handle nested field sorting in multi-column", () => {
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "neighbourhood.name", order: "asc", priority: 1 },
+          { field: "team.name", order: "desc", priority: 2 }
+        ]
+      }
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      
+      expect(result[0].neighbourhood.name).toBe("Downtown")
+      expect(result[2].neighbourhood.name).toBe("Midtown")
+    })
+
+    it("should handle null values in multi-column sorting", () => {
+      const dataWithNulls = [
+        ...sampleData,
+        { 
+          ...sampleData[0], 
+          id: "4",
+          neighbourhood: null,
+          status: "pending"
+        }
+      ]
+      
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "status", order: "asc", priority: 1 },
+          { field: "neighbourhood.name", order: "asc", priority: 2 }
+        ]
+      }
+      
+      const result = applyMultiSorting(dataWithNulls, multiSortConfig)
+      
+      // Null values should be placed at the end within their status group
+      const pendingItems = result.filter(item => item.status === "pending")
+      const lastPendingItem = pendingItems[pendingItems.length - 1]
+      expect(lastPendingItem.neighbourhood).toBeNull()
+    })
+
+    it("should handle different data types in multi-column sorting", () => {
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "latitude", order: "desc", priority: 1 },
+          { field: "created_at", order: "asc", priority: 2 }
+        ]
+      }
+      
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      
+      // Should be sorted by latitude desc first
+      expect(result[0].latitude).toBe(40.7589)
+      expect(result[2].latitude).toBe(40.7128)
+    })
+
+    it("should return original data when no columns provided", () => {
+      const multiSortConfig: MultiSortConfig = { columns: [] }
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      expect(result).toEqual(sampleData)
+    })
+
+    it("should handle priority ordering correctly", () => {
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "title", order: "asc", priority: 2 },
+          { field: "status", order: "desc", priority: 1 }
+        ]
+      }
+      
+      const result = applyMultiSorting(sampleData, multiSortConfig)
+      
+      // Priority 1 (status desc) should take precedence over priority 2 (title asc)
+      // Status desc order: "pending", "in_progress", "completed"
+      expect(result[0].status).toBe("pending")
+      expect(result[2].status).toBe("completed")
+    })
+
+    it("should handle equal values across all sort columns", () => {
+      const identicalData = [
+        { id: "1", title: "Same", status: "same", created_at: "2024-01-15T10:00:00Z" },
+        { id: "2", title: "Same", status: "same", created_at: "2024-01-15T10:00:00Z" },
+        { id: "3", title: "Same", status: "same", created_at: "2024-01-15T10:00:00Z" }
+      ]
+      
+      const multiSortConfig: MultiSortConfig = {
+        columns: [
+          { field: "status", order: "asc", priority: 1 },
+          { field: "title", order: "asc", priority: 2 }
+        ]
+      }
+      
+      const result = applyMultiSorting(identicalData, multiSortConfig)
+      
+      // Should maintain original order when all values are equal
+      expect(result).toEqual(identicalData)
     })
   })
 

@@ -1,4 +1,4 @@
-import type { FilterGroup, SortConfig } from "./types"
+import type { FilterGroup, SortConfig, MultiSortConfig } from "./types"
 
 export function getNestedValue(obj: any, path: string): any {
   if (!obj || !path) return undefined
@@ -188,6 +188,48 @@ export function applySorting(data: any[], sortConfig: SortConfig): any[] {
     }
 
     return sortConfig.order === "desc" ? -comparison : comparison
+  })
+}
+
+function compareValues(aValue: any, bValue: any): number {
+  if (aValue === null || aValue === undefined) return 1
+  if (bValue === null || bValue === undefined) return -1
+
+  // Handle different data types
+  if (typeof aValue === "string" && typeof bValue === "string") {
+    return aValue.localeCompare(bValue)
+  } else if (typeof aValue === "number" && typeof bValue === "number") {
+    return aValue - bValue
+  } else if (aValue instanceof Date && bValue instanceof Date) {
+    return aValue.getTime() - bValue.getTime()
+  } else {
+    // Fallback to string comparison
+    return String(aValue).localeCompare(String(bValue))
+  }
+}
+
+export function applyMultiSorting(data: any[], multiSortConfig: MultiSortConfig): any[] {
+  if (!multiSortConfig.columns || multiSortConfig.columns.length === 0) return data
+
+  // Sort columns by priority (lower priority number = higher precedence)
+  const sortedColumns = [...multiSortConfig.columns].sort((a, b) => a.priority - b.priority)
+
+  return [...data].sort((a, b) => {
+    // Compare each sort column in priority order
+    for (const sortColumn of sortedColumns) {
+      const aValue = getNestedValue(a, sortColumn.field)
+      const bValue = getNestedValue(b, sortColumn.field)
+
+      const comparison = compareValues(aValue, bValue)
+      
+      if (comparison !== 0) {
+        return sortColumn.order === "desc" ? -comparison : comparison
+      }
+      // If values are equal, continue to next sort column
+    }
+    
+    // All sort columns have equal values
+    return 0
   })
 }
 
